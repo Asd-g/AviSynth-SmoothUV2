@@ -245,6 +245,7 @@ class SmoothUV : public GenericVideoFilter
 {
 	int _radius, _threshold;
 	bool _interlaced;
+	bool has_at_least_v8;
 
 	uint16_t divin[256];
 
@@ -252,6 +253,9 @@ public:
 	SmoothUV(PClip _child, int radius, int threshold, bool interlaced, IScriptEnvironment* env)
 		: GenericVideoFilter(_child), _radius(radius), _threshold(threshold), _interlaced(interlaced)
 	{
+		has_at_least_v8 = true;
+		try { env->CheckVersion(8); } catch (const AvisynthError&) { has_at_least_v8 = false; }
+
 		for (int i = 1; i < 256; i++)
 			divin[i] = (uint16_t)std::min((int)(65536.0 / i + 0.5), 65535);
 
@@ -273,7 +277,8 @@ public:
 	PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env)
 	{
 		PVideoFrame src = child->GetFrame(n, env);
-		PVideoFrame dst = env->NewVideoFrame(vi);
+		PVideoFrame dst;
+		if (has_at_least_v8) dst = env->NewVideoFrameP(vi, &src); else dst = env->NewVideoFrame(vi);
 
 		const uint8_t* srcp;
 		uint8_t* dstp;

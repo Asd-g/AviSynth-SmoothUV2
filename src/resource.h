@@ -1,6 +1,6 @@
 ﻿//{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by SmoothUV.rc
+// Used by SmoothUV2.rc
 //
 #define _USE_DECLSPECS_FOR_SAL          0
 #define _USE_ATTRIBUTES_FOR_SAL         0
