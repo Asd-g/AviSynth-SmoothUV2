@@ -20,12 +20,12 @@ SmoothUV(clip, int "radius", int "threshold", bool "interlaced")
     A clip to process. It must have constant format and it must be 8 bit YUV.
     
 - radius\
-    Radius. Must be between 1 and 7.\
+    Must be between 1 and 7.\
     Larger values smooth more.\
     Default: 3.
     
 - threshold\
-    Threshold. Must be between 0 and 450.\
+    Must be between 0 and 450.\
     Larger values smooth more.\
     Default: 270.
     
