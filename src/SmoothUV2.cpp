@@ -1,8 +1,8 @@
 #include <algorithm>
-
 #include <emmintrin.h>
 
-#include <avisynth.h>
+#include "avisynth.h"
+#include "avs/minmax.h"
 
 static inline void sum_pixels_SSE2(const uint8_t* srcp, uint8_t* dstp, const int stride,
 	const int diff, const int width, const int height,
@@ -79,9 +79,9 @@ static void smoothN_SSE2(int radius,
 	const uint8_t* srcp = origsrc;
 	const uint8_t* srcp2 = origsrc + stride;
 	uint8_t* dstp = origdst;
-	uint8_t* dstp2 = origdst + stride;
+	uint8_t* dstp2 = origdst + dst_stride;
 
-	const int SqrtTsquared = (int)sqrt((threshold * threshold) / 3);
+	const int SqrtTsquared = static_cast<int>(sqrt((threshold * threshold) / 3));
 
 	const __m128i thres = _mm_set1_epi16(SqrtTsquared);
 
@@ -90,6 +90,7 @@ static void smoothN_SSE2(int radius,
 	if (interlaced)
 	{
 		stride *= 2;
+		dst_stride *= 2;
 		h2 >>= 1;
 	}
 
@@ -128,89 +129,13 @@ static void smoothN_SSE2(int radius,
 			}
 		}
 
-		dstp += stride;
-		srcp += stride;
-		dstp2 += stride;
-		srcp2 += stride;
-
-	}
-
-	if (interlaced && h % 1) {
-		int yn = radius;
-
-		int offset = radius * stride;
-
-		for (int x = 0; x < w; x += 8) {
-			int x0 = (x < radius) ? x : radius;
-
-			int xn = (x + 7 + radius < w - 1) ? x0 + radius + 1
-				: x0 + w - x - 7;
-
-			sum_pixels_SSE2(srcp + x, dstp + x,
-				stride,
-				offset + x0,
-				xn, yn,
-				thres,
-				divin);
-		}
-	}
-}
-
-template <bool interlaced>
-static void smoothN_SSE2t(int radius,
-	const uint8_t* origsrc, uint8_t* origdst,
-	int stride, int dst_stride, int w, int h,
-	const int threshold,
-	const uint16_t* divin) {
-	const uint8_t* srcp = origsrc;
-	const uint8_t* srcp2 = origsrc + stride;
-	uint8_t* dstp = origdst;
-	uint8_t* dstp2 = origdst + dst_stride;
-
-	const int SqrtTsquared = (int)sqrt((threshold * threshold) / 3);
-
-	const __m128i thres = _mm_set1_epi16(SqrtTsquared);
-
-	int h2 = h;
-
-	for (int y = 0; y < h2; y++) {
-		int y0 = (y < radius) ? y : radius;
-
-		int yn = (y < h2 - radius) ? y0 + radius + 1
-			: y0 + (h2 - y);
-
-		int offset = y0 * stride;
-
-		for (int x = 0; x < w; x += 8) {
-			int x0 = (x < radius) ? x : radius;
-
-			int xn = (x + 7 + radius < w - 1) ? x0 + radius + 1
-				: x0 + w - x - 7;
-
-			sum_pixels_SSE2(srcp + x, dstp + x,
-				stride,
-				offset + x0,
-				xn, yn,
-				thres,
-				divin);
-
-			if (interlaced) {
-				sum_pixels_SSE2(srcp2 + x, dstp2 + x,
-					stride,
-					offset + x0,
-					xn, yn,
-					thres,
-					divin);
-			}
-		}
-
 		dstp += dst_stride;
 		srcp += stride;
 		dstp2 += dst_stride;
 		srcp2 += stride;
 	}
 
-	if (interlaced && h % 1) {
+	if (interlaced && h % 2) {
 		int yn = radius;
 
 		int offset = radius * stride;
@@ -231,7 +156,8 @@ static void smoothN_SSE2t(int radius,
 	}
 }
 
-static void copy_plane(PVideoFrame& dst, PVideoFrame& src, int plane, IScriptEnvironment* env) {
+static void copy_plane(PVideoFrame& dst, PVideoFrame& src, int plane, IScriptEnvironment* env)
+{
 	const uint8_t* srcp = src->GetReadPtr(plane);
 	int src_pitch = src->GetPitch(plane);
 	int height = src->GetHeight(plane);
@@ -245,6 +171,7 @@ class SmoothUV : public GenericVideoFilter
 {
 	int _radius, _threshold;
 	bool _interlaced;
+	bool field_based;
 	bool has_at_least_v8;
 
 	uint16_t divin[256];
@@ -254,74 +181,48 @@ public:
 		: GenericVideoFilter(_child), _radius(radius), _threshold(threshold), _interlaced(interlaced)
 	{
 		has_at_least_v8 = true;
-		try { env->CheckVersion(8); } catch (const AvisynthError&) { has_at_least_v8 = false; }
+		try { env->CheckVersion(8); }
+		catch (const AvisynthError&) { has_at_least_v8 = false; }
 
 		for (int i = 1; i < 256; i++)
-			divin[i] = (uint16_t)std::min((int)(65536.0 / i + 0.5), 65535);
+			divin[i] = static_cast<uint16_t>(min(static_cast<int>(65536.0 / i + 0.5), 65535));
 
-		if (vi.BitsPerComponent() != 8 || vi.NumComponents() != 3)
-		{
-			env->ThrowError("SmoothUV: only 8 bit YUV with constant format supported.");
-		}
+		if ((vi.IsRGB() && vi.BitsPerComponent() == 8) || vi.BitsPerComponent() != 8 || vi.NumComponents() < 3)
+			env->ThrowError("SmoothUV: only 8 bit YUV(A) with constant format supported.");
 
 		if (radius < 1 || radius > 7)
-		{
 			env->ThrowError("SmoothUV: radius must be between 1 and 7 (inclusive).");
-		}
 
 		if (threshold < 0 || threshold > 450)
-		{
 			env->ThrowError("SmoothUV: threshold must be between 0 and 450 (inclusive).");
-		}
+
+		field_based = _interlaced;
 	}
+
 	PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env)
 	{
 		PVideoFrame src = child->GetFrame(n, env);
 		PVideoFrame dst;
 		if (has_at_least_v8) dst = env->NewVideoFrameP(vi, &src); else dst = env->NewVideoFrame(vi);
 
-		const uint8_t* srcp;
-		uint8_t* dstp;
-		int src_stride, dst_stride, width, height;
-		bool interlaced;
-
-		int planes_y[3] = { PLANAR_Y, PLANAR_U, PLANAR_V };
-		for (int i = 0; i < 3; i++)
+		int planes_y[4] = { PLANAR_Y, PLANAR_U, PLANAR_V, PLANAR_A };
+		int planecount = min(vi.NumComponents(), 3);
+		for (int i = 0; i < planecount; i++)
 		{
 			const int plane = planes_y[i];
+
+			int src_stride = src->GetPitch(plane);
+			int dst_stride = dst->GetPitch(plane);
+			int width = src->GetRowSize(plane);
+			int height = dst->GetHeight(plane);
+			const uint8_t* srcp = src->GetReadPtr(plane);
+			uint8_t* dstp = dst->GetWritePtr(plane);
+
 			if (plane == 1)
-			{
 				copy_plane(dst, src, plane, env);
-			}
 			else
-			{
-				src_stride = src->GetPitch(plane);
-				dst_stride = dst->GetPitch(plane);
-				width = src->GetRowSize(plane);
-				height = dst->GetHeight(plane);
-				srcp = src->GetReadPtr(plane);
-				dstp = dst->GetWritePtr(plane);
-
-				interlaced = vi.IsFieldBased();
-				interlaced = _interlaced;
-
-				if (interlaced && src_stride == dst_stride)
-				{
-					(smoothN_SSE2<true>)(_radius, srcp, dstp, src_stride, dst_stride, width, height, _threshold, divin);
-				}
-				else if (interlaced && src_stride != dst_stride)
-				{
-					(smoothN_SSE2t<true>)(_radius, srcp, dstp, src_stride, dst_stride, width, height, _threshold, divin);					
-				}
-				else if (!interlaced && src_stride == dst_stride)
-				{
-					(smoothN_SSE2<false>)(_radius, srcp, dstp, src_stride, dst_stride, width, height, _threshold, divin);
-				}
-				else
-				{
-					env->ThrowError("SmoothUV: incompatible interlaced value");
-				}
-			}
+				(field_based ? smoothN_SSE2<true>
+					: smoothN_SSE2<false>)(_radius, srcp, dstp, src_stride, dst_stride, width, height, _threshold, divin);
 		}
 
 		return dst;
@@ -330,10 +231,14 @@ public:
 
 AVSValue __cdecl Create_SmoothUV(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
-	PClip clip = args[0].AsClip();
-	const VideoInfo& vi = clip->GetVideoInfo();
+	const VideoInfo& vi = args[0].AsClip()->GetVideoInfo();
 
-	return new SmoothUV(args[0].AsClip(), args[1].AsInt(3), args[2].AsInt(270), args[3].AsBool(vi.IsFieldBased()), env);
+	return new SmoothUV(
+		args[0].AsClip(),
+		args[1].AsInt(3),
+		args[2].AsInt(270),
+		args[3].AsBool(vi.IsFieldBased()),
+		env);
 }
 
 const AVS_Linkage* AVS_linkage;
@@ -343,6 +248,6 @@ const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Lin
 {
 	AVS_linkage = vectors;
 
-	env->AddFunction("SmoothUV", "c[radius]i[threshold]i[interlaced]b", Create_SmoothUV, NULL);
+	env->AddFunction("SmoothUV", "c[radius]i[threshold]i[interlaced]b", Create_SmoothUV, 0);
 	return "SmoothUV";
 }

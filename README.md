@@ -17,7 +17,7 @@ SmoothUV(clip, int "radius", int "threshold", bool "interlaced")
 ## Parameters:
 
 - clip\
-    A clip to process. It must have constant format and it must be 8 bit YUV.
+    A clip to process. It must have constant format and it must be 8 bit YUV(A).
     
 - radius\
     Must be between 1 and 7.\
