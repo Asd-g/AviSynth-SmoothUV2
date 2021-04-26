@@ -1,3 +1,15 @@
+##### 3.0.0:
+    Fixed non-processed edges.
+    Added support for 10..16-bit.
+    Set MT mode: MT_NICE_FILTER.
+    Changed the range of parameter threshold from 0..450 to 0..255.
+    Changed the type of parameter interlaced from bool to int.
+    Changed the minimum CPU instructions support from SSE2 to SSE4.1.
+    Added Linux building option.
+
+##### 2.1.2:
+    Throw error for non-planar formats.
+
 ##### 2.1.1:
     Fixed memory misalignment for AviSynth 2.6.
     Fixed processing when interlaced and h % 2.
