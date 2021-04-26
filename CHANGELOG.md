@@ -1,5 +1,5 @@
 ##### 3.0.0:
-    Fixed non-processed edges.
+    Fixed not processed edges.
     Added support for 10..16-bit.
     Set MT mode: MT_NICE_FILTER.
     Changed the range of parameter threshold from 0..450 to 0..255.
