@@ -35,7 +35,7 @@ SmoothUV(clip, int "radius", int "threshold", int "interlaced")
     
 - interlaced\
     Whether the frame is interlaced.\
-    -1: If frame properties are supported and frame property "_FieldBased" exists - "_FieldBased" values is used.\
+    -1: If frame properties are supported and frame property "_FieldBased" exists - "_FieldBased" value is used.\
     If frame properties aren't supported or there is no property "_FieldBased" - 0.\
     0: Progressive frame.\
     1: Interlaced frame.\
