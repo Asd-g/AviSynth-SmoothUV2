@@ -3,9 +3,10 @@
 
 #include "avisynth.h"
 #include "avs/minmax.h"
+#include "avs/config.h"
 
 template <typename T, int bits>
-static inline void sum_pixels_SSE41(const T* srcp, T* dstp, const int stride,
+static AVS_FORCEINLINE void sum_pixels_SSE41(const T* srcp, T* dstp, const int stride,
     const int diff, const int width, const int height,
     const int threshold,
     const uint16_t* divinp)
@@ -174,7 +175,7 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
             int x0 = (x < radius) ? x : radius;
 
             int xn = (x + vsize - 1 + radius < w - 1) ? x0 + radius + 1
-                : x0 + w - x - vsize;
+                : max(x0 + w - x - vsize - 1, 0);
 
             sum_pixels_SSE41<T, bits>(srcp + x, dstp + x,
                 stride,
@@ -211,7 +212,7 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
             int x0 = (x < radius) ? x : radius;
 
             int xn = (x + vsize - 1 + radius < w - 1) ? x0 + radius + 1
-                : x0 + w - x - vsize;
+                : max(x0 + w - x - vsize - 1, 0);
 
             sum_pixels_SSE41<T, bits>(srcp + x, dstp + x,
                 stride,
@@ -241,8 +242,8 @@ public:
             env->ThrowError("SmoothUV: radius must be between 1 and 7 (inclusive).");
         if (_threshold < 0 || _threshold > 255)
             env->ThrowError("SmoothUV: threshold must be between 0 and 255 (inclusive).");
-        if (_interlaced < -1 || _interlaced > 2)
-            env->ThrowError("SmoothUV: interlaced must be between -1 and 2 (inclusive).");
+        if (_interlaced < -1 || _interlaced > 1)
+            env->ThrowError("SmoothUV: interlaced must be between -1 and 1 (inclusive).");
 
         if (vi.ComponentSize() == 2)
             _threshold *= ((1 << vi.BitsPerComponent()) - 1) / 255;
@@ -265,7 +266,7 @@ public:
         PVideoFrame src = child->GetFrame(n, env);
         PVideoFrame dst = (has_at_least_v8) ? env->NewVideoFrameP(vi, &src) : env->NewVideoFrame(vi);
 
-        int64_t field_based = [&]()
+        const int64_t field_based = [&]()
         {
             if (has_at_least_v8)
             {

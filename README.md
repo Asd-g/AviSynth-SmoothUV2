@@ -39,7 +39,6 @@ SmoothUV(clip, int "radius", int "threshold", int "interlaced")
     If frame properties aren't supported or there is no property "_FieldBased" - 0.\
     0: Progressive frame.\
     1: Interlaced frame.\
-    2: Interlaced frame.\
     Default: -1.
 
 # Building

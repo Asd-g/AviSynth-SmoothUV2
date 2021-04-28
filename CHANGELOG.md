@@ -1,3 +1,7 @@
+##### 3.0.1:
+    Another attemp to fix last columns processing.
+    Removed redunant interlaced value 2.
+
 ##### 3.0.0:
     Fixed not processed edges.
     Added support for 10..16-bit.
