@@ -5,6 +5,28 @@
 #include "avs/minmax.h"
 #include "avs/config.h"
 
+class SmoothUV2 : public GenericVideoFilter
+{
+    int _threshold;
+    int _interlaced;
+    bool has_at_least_v8;
+    int radiusw, radiush;
+    uint16_t divin[256];
+
+    template <typename T, bool interlaced, int bits>
+    void smoothN_SSE41(const uint8_t* origsrc, uint8_t* origdst, int stride, int dst_stride, int w, int h);
+
+public:
+    SmoothUV2(PClip _child, int radius, int threshold, int interlaced, IScriptEnvironment* env);
+
+    int __stdcall SetCacheHints(int cachehints, int frame_range) override
+    {
+        return cachehints == CACHE_GET_MTMODE ? MT_NICE_FILTER : 0;
+    }
+
+    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
+};
+
 template <typename T, int bits>
 static AVS_FORCEINLINE void sum_pixels_SSE41(const T* srcp, T* dstp, const int stride,
     const int diff, const int width, const int height,
@@ -25,7 +47,7 @@ static AVS_FORCEINLINE void sum_pixels_SSE41(const T* srcp, T* dstp, const int s
 
         for (int y = 0; y < height; ++y)
         {
-            for (int x = 0; x <= width; ++x)
+            for (int x = 0; x < width; ++x)
             {
                 __m128i neighbour_pixel = _mm_unpacklo_epi8(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)),
                     zeroes);
@@ -71,7 +93,7 @@ static AVS_FORCEINLINE void sum_pixels_SSE41(const T* srcp, T* dstp, const int s
 
         for (int y = 0; y < height; ++y)
         {
-            for (int x = 0; x <= width; ++x)
+            for (int x = 0; x < width; ++x)
             {
                 __m128i neighbour_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)),
                     zeroes);
@@ -138,7 +160,7 @@ static AVS_FORCEINLINE void sum_pixels_SSE41(const T* srcp, T* dstp, const int s
 }
 
 template <typename T, bool interlaced, int bits>
-static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, int stride, int dst_stride, int w, int h, const int threshold, const uint16_t* divin)
+void SmoothUV2::smoothN_SSE41(const uint8_t* origsrc, uint8_t* origdst, int stride, int dst_stride, int w, int h)
 {
     stride /= sizeof(T);
     dst_stride /= sizeof(T);
@@ -158,11 +180,13 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
         h2 >>= 1;
     }
 
+    const int offs = (interlaced) ? 2 : 1;
+
     for (int y = 0; y < h2; ++y)
     {
-        int y0 = (y < radius) ? y : radius;
+        int y0 = (y < radiush) ? y : radiush;
 
-        int yn = (y < h2 - radius) ? y0 + radius + 1
+        int yn = (y < h2 - radiush) ? y0 + radiush + 1 * offs
             : y0 + (h2 - y);
 
         if (interlaced)
@@ -172,16 +196,16 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
 
         for (int x = 0; x < w; x += vsize)
         {
-            int x0 = (x < radius) ? x : radius;
+            int x0 = (x < radiusw) ? x : radiusw;
 
-            int xn = (x + vsize - 1 + radius < w - 1) ? x0 + radius + 1
-                : max(x0 + w - x - vsize - 1, 0);
+            int xn = (x + vsize - 1 + radiusw < w - 1) ? x0 + radiusw + 1
+                : max(x0 + (w - x) - (vsize - 1), 1);
 
             sum_pixels_SSE41<T, bits>(srcp + x, dstp + x,
                 stride,
                 offset + x0,
                 xn, yn,
-                threshold,
+                _threshold,
                 divin);
 
             if (interlaced)
@@ -190,7 +214,7 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
                     stride,
                     offset + x0,
                     xn, yn,
-                    threshold,
+                    _threshold,
                     divin);
             }
         }
@@ -203,133 +227,125 @@ static void smoothN_SSE41(int radius, const uint8_t* origsrc, uint8_t* origdst, 
 
     if (interlaced && h % 2)
     {
-        int yn = radius;
+        int yn = radiush;
 
-        int offset = radius * stride;
+        int offset = radiush * stride;
 
         for (int x = 0; x < w; x += vsize)
         {
-            int x0 = (x < radius) ? x : radius;
+            int x0 = (x < radiusw) ? x : radiusw;
 
-            int xn = (x + vsize - 1 + radius < w - 1) ? x0 + radius + 1
-                : max(x0 + w - x - vsize - 1, 0);
+            int xn = (x + vsize - 1 + radiusw < w - 1) ? x0 + radiusw + 1
+                : max(x0 + (w - x) - (vsize - 1), 1);
 
             sum_pixels_SSE41<T, bits>(srcp + x, dstp + x,
                 stride,
                 offset + x0,
                 xn, yn,
-                threshold,
+                _threshold,
                 divin);
         }
     }
 }
 
-class SmoothUV : public GenericVideoFilter
+SmoothUV2::SmoothUV2(PClip _child, int radius, int threshold, int interlaced, IScriptEnvironment* env)
+    : GenericVideoFilter(_child), _interlaced(interlaced)
 {
-    int _radius, _threshold;
-    int _interlaced;
-    bool has_at_least_v8;
+    if (vi.IsRGB() || vi.BitsPerComponent() == 32 || vi.NumComponents() < 3 || !vi.IsPlanar())
+        env->ThrowError("SmoothUV2: only 8..16-bit YUV planar format supported with minimum three planes.");
+    if (vi.Is420() && (radius < 1 || radius > 7))
+        env->ThrowError("SmoothUV2: radius must be between 1 and 7 (inclusive).");
+    if (!vi.Is420() && (radius < 1 || radius > 3))
+        env->ThrowError("SmoothUV2: radius must be between 1 and 3 (inclusive) for subsampling other than 4:2:0.");
+    if (threshold < 0 || threshold > 255)
+        env->ThrowError("SmoothUV2: threshold must be between 0 and 255 (inclusive).");
+    if (_interlaced < -1 || _interlaced > 1)
+        env->ThrowError("SmoothUV2: interlaced must be between -1 and 1 (inclusive).");
 
-    uint16_t divin[256];
+    if (vi.ComponentSize() == 2)
+        _threshold = threshold * ((1 << vi.BitsPerComponent()) - 1) / 255;
+    else
+        _threshold = threshold;
 
-public:
-    SmoothUV(PClip _child, int radius, int threshold, int interlaced, IScriptEnvironment* env)
-        : GenericVideoFilter(_child), _radius(radius), _threshold(threshold), _interlaced(interlaced)
+    radiusw = radius << (1 - vi.GetPlaneWidthSubsampling(PLANAR_U));
+    radiush = radius << (1 - vi.GetPlaneHeightSubsampling(PLANAR_U));
+
+    has_at_least_v8 = true;
+    try { env->CheckVersion(8); }
+    catch (const AvisynthError&) { has_at_least_v8 = false; }
+
+    for (int i = 1; i < 256; ++i)
+        divin[i] = static_cast<uint16_t>(min(static_cast<int>(65536.0 / i + 0.5), 65535));
+}
+
+PVideoFrame __stdcall SmoothUV2::GetFrame(int n, IScriptEnvironment* env)
+{
+    PVideoFrame src = child->GetFrame(n, env);
+    PVideoFrame dst = (has_at_least_v8) ? env->NewVideoFrameP(vi, &src) : env->NewVideoFrame(vi);
+
+    const int64_t field_based = [&]()
     {
-        if (vi.IsRGB() || vi.BitsPerComponent() == 32 || vi.NumComponents() < 3 || !vi.IsPlanar())
-            env->ThrowError("SmoothUV: only 8..16-bit YUV planar format supported with minimum three planes.");
-        if (_radius < 1 || _radius > 7)
-            env->ThrowError("SmoothUV: radius must be between 1 and 7 (inclusive).");
-        if (_threshold < 0 || _threshold > 255)
-            env->ThrowError("SmoothUV: threshold must be between 0 and 255 (inclusive).");
-        if (_interlaced < -1 || _interlaced > 1)
-            env->ThrowError("SmoothUV: interlaced must be between -1 and 1 (inclusive).");
-
-        if (vi.ComponentSize() == 2)
-            _threshold *= ((1 << vi.BitsPerComponent()) - 1) / 255;
-
-        has_at_least_v8 = true;
-        try { env->CheckVersion(8); }
-        catch (const AvisynthError&) { has_at_least_v8 = false; }
-
-        for (int i = 1; i < 256; ++i)
-            divin[i] = static_cast<uint16_t>(min(static_cast<int>(65536.0 / i + 0.5), 65535));
-    }
-
-    int __stdcall SetCacheHints(int cachehints, int frame_range) override
-    {
-        return cachehints == CACHE_GET_MTMODE ? MT_NICE_FILTER : 0;
-    }
-
-    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env)
-    {
-        PVideoFrame src = child->GetFrame(n, env);
-        PVideoFrame dst = (has_at_least_v8) ? env->NewVideoFrameP(vi, &src) : env->NewVideoFrame(vi);
-
-        const int64_t field_based = [&]()
+        if (has_at_least_v8)
         {
-            if (has_at_least_v8)
+            if (_interlaced == -1)
             {
-                if (_interlaced == -1)
-                {
-                    const AVSMap* props = env->getFramePropsRO(src);
+                const AVSMap* props = env->getFramePropsRO(src);
 
-                    if (env->propNumElements(props, "_FieldBased") > 0)
-                        return env->propGetInt(props, "_FieldBased", 0, nullptr);
-                    else
-                        return static_cast<int64_t>(0);
-                }
+                if (env->propNumElements(props, "_FieldBased") > 0)
+                    return env->propGetInt(props, "_FieldBased", 0, nullptr);
                 else
-                    return static_cast<int64_t>(_interlaced);
-            }
-            else
-            {
-                if (_interlaced == -1)
                     return static_cast<int64_t>(0);
-                else
-                    return static_cast<int64_t>(_interlaced);
             }
-        }();
-
-        void (*smooth)(int radius, const uint8_t * origsrc, uint8_t * origdst, int stride, int dst_stride, int w, int h, const int threshold, const uint16_t * divin) = [&]() {
-            if (vi.ComponentSize() == 1)
-                return (field_based) ? smoothN_SSE41<uint8_t, true, 8> : smoothN_SSE41<uint8_t, false, 8>;
             else
-            {
-                switch (vi.BitsPerComponent())
-                {
-                    case 10: return (field_based) ? smoothN_SSE41<uint16_t, true, 10> : smoothN_SSE41<uint16_t, false, 10>;
-                    case 12: return (field_based) ? smoothN_SSE41<uint16_t, true, 12> : smoothN_SSE41<uint16_t, false, 12>;
-                    case 14: return (field_based) ? smoothN_SSE41<uint16_t, true, 14> : smoothN_SSE41<uint16_t, false, 14>;
-                    case 16: return (field_based) ? smoothN_SSE41<uint16_t, true, 16> : smoothN_SSE41<uint16_t, false, 16>;
-                }                
-            }
-        }();
-
-        int planes_y[3] = { PLANAR_Y, PLANAR_U, PLANAR_V };
-        int planecount = min(vi.NumComponents(), 3);
-        for (int i = 0; i < planecount; ++i)
-        {
-            int src_stride = src->GetPitch(planes_y[i]);
-            int dst_stride = dst->GetPitch(planes_y[i]);
-            int width = src->GetRowSize(planes_y[i]);
-            int height = dst->GetHeight(planes_y[i]);
-            const uint8_t* srcp = src->GetReadPtr(planes_y[i]);
-            uint8_t* dstp = dst->GetWritePtr(planes_y[i]);
-
-            if (i == 0)
-                env->BitBlt(dstp, dst_stride, srcp, src_stride, width, height);
-            else
-                smooth(_radius, srcp, dstp, src_stride, dst_stride, width, height, _threshold, divin);
+                return static_cast<int64_t>(_interlaced);
         }
+        else
+        {
+            if (_interlaced == -1)
+                return static_cast<int64_t>(0);
+            else
+                return static_cast<int64_t>(_interlaced);
+        }
+    }();
 
-        return dst;
+    void (SmoothUV2::*smooth)(const uint8_t * origsrc, uint8_t * origdst, int stride, int dst_stride, int w, int h) = [&]() {
+        if (vi.ComponentSize() == 1)
+            return (field_based) ? &SmoothUV2::smoothN_SSE41<uint8_t, true, 8> : &SmoothUV2::smoothN_SSE41<uint8_t, false, 8>;
+        else
+        {
+            switch (vi.BitsPerComponent())
+            {
+                case 10: return (field_based) ? &SmoothUV2::smoothN_SSE41<uint16_t, true, 10> : &SmoothUV2::smoothN_SSE41<uint16_t, false, 10>;
+                case 12: return (field_based) ? &SmoothUV2::smoothN_SSE41<uint16_t, true, 12> : &SmoothUV2::smoothN_SSE41<uint16_t, false, 12>;
+                case 14: return (field_based) ? &SmoothUV2::smoothN_SSE41<uint16_t, true, 14> : &SmoothUV2::smoothN_SSE41<uint16_t, false, 14>;
+                case 16: return (field_based) ? &SmoothUV2::smoothN_SSE41<uint16_t, true, 16> : &SmoothUV2::smoothN_SSE41<uint16_t, false, 16>;
+            }
+        }
+    }();
+
+    int planes_y[3] = { PLANAR_Y, PLANAR_U, PLANAR_V };
+    int planecount = min(vi.NumComponents(), 3);
+    for (int i = 0; i < planecount; ++i)
+    {
+        int src_stride = src->GetPitch(planes_y[i]);
+        int dst_stride = dst->GetPitch(planes_y[i]);
+        int width = src->GetRowSize(planes_y[i]);
+        int height = dst->GetHeight(planes_y[i]);
+        const uint8_t* srcp = src->GetReadPtr(planes_y[i]);
+        uint8_t* dstp = dst->GetWritePtr(planes_y[i]);
+
+        if (i == 0)
+            env->BitBlt(dstp, dst_stride, srcp, src_stride, width, height);
+        else
+            (this->*smooth)(srcp, dstp, src_stride, dst_stride, width, height);
     }
-};
 
-AVSValue __cdecl Create_SmoothUV(AVSValue args, void* user_data, IScriptEnvironment* env)
+    return dst;
+}
+
+AVSValue __cdecl Create_SmoothUV2(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
-    return new SmoothUV(
+    return new SmoothUV2(
         args[0].AsClip(),
         args[1].AsInt(3),
         args[2].AsInt(150),
@@ -344,6 +360,6 @@ const char* __stdcall AvisynthPluginInit3(IScriptEnvironment * env, const AVS_Li
 {
     AVS_linkage = vectors;
 
-    env->AddFunction("SmoothUV", "c[radius]i[threshold]i[interlaced]i", Create_SmoothUV, 0);
-    return "SmoothUV";
+    env->AddFunction("SmoothUV2", "c[radius]i[threshold]i[interlaced]i", Create_SmoothUV2, 0);
+    return "SmoothUV2";
 }

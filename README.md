@@ -1,12 +1,10 @@
 # Description
 
-SmoothUV is a spatial derainbow filter.
+SmoothUV2 is a spatial derainbow filter.
 
 The luma is returned unchanged.
 
 This is [a port of the VapourSynth plugin SmoothUV](https://github.com/dubhater/vapoursynth-smoothuv).
-
-The file name is SmoothUV2 but the function name is SmoothUV. The reason for changing the file name is that the original SmoothUV plugin has one more function SSHiQ that is not ported here.
 
 # Requirement
 
@@ -15,7 +13,7 @@ CPU with minimum supported instructions SSE4.1.
 # Usage
 
 ```
-SmoothUV(clip, int "radius", int "threshold", int "interlaced")
+SmoothUV2 (clip, int "radius", int "threshold", int "interlaced")
 ```
 
 ## Parameters:
@@ -24,7 +22,7 @@ SmoothUV(clip, int "radius", int "threshold", int "interlaced")
     A clip to process. It must be in YUV 8..16-bit planar format and must have at least three planes.
     
 - radius\
-    Must be between 1 and 7.\
+    Must be between 1 and 7 for 4:2:0 subsampling and between 1 and 3 for 4:2:2/4:4:4 subsampling.\
     Larger values smooth more.\
     Default: 3.
     
