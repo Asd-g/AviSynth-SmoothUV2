@@ -1,3 +1,10 @@
+##### 4.0.0:
+    Function name changed to SmoothUV2.
+    Fixed horizontal planes shift.
+    Fixed vertical planes shift for interlaced frames.
+    Fixed output for 422/444 subsampling.
+    Additional limit radius for 422/444.
+
 ##### 3.0.1:
     Another attemp to fix last columns processing.
     Removed redunant interlaced value 2.
