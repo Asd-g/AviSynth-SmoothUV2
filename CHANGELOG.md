@@ -1,3 +1,13 @@
+##### 4.1.0:
+    SmoothUV2 threshold changed back to 0..450 range.
+    A bit improved calculation for 8-bit.
+    Added SSHiQ2 function: updated version of SSHiQ from SmoothUV v1.4.0:
+    - replaced MMX asm code with SSE4.1 intrinsics;
+    - fixed planes shift;
+    - added support for 10..16-bit;
+    - added support for 422/444 chroma subsampling;
+    - more precise 8-bit calculation.
+
 ##### 4.0.0:
     Function name changed to SmoothUV2.
     Fixed horizontal planes shift.
