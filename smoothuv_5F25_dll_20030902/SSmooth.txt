@@ -1,0 +1,50 @@
+Pre-release version (GNU GPL license), super-fast readme
+
+Functions:
+- SmoothUV
+- SSHiQ
+
+Syntax
+1) SSHiQ(int rY, int rC, int tY, int tC, int str, boolean HQY,
+	 boolean HQC, field)
+   - rY and rC are respectively the radii for luminance and chrominance
+     (how far from the current pixel neighbours are used).
+     The greater the more smooth.
+   - tY and tC are thresholds (details sensibility)
+     The greater the more smooth (not exactly the same as fpr other
+     SSHiQ filters).
+   - str is the strength (only used in HiQ mode), ie how much of the
+     smoothed version should be used at best for calculating the new
+     pixel
+   - HQY and HQC tell whether to use the HiQ mode, where the edge
+     information automatically reduce the strength value.
+     (HQ == 0) ? smoothed_pixel :
+                 ( (strength-edge*2)*smoothed_pixel +
+                   (256-(strength-edge*2))*pixel_in )/256
+   - field allows you to process independantly fields (risks of worse
+     blurring/color bleeding)
+
+2) SmoothUV (used to reduce rainbows, as done by smartsmoothIQ)
+   SmoothUV(int radius,int threshold, boolean field)
+   - radius is the range operation
+   - threshold is the one used in smartsmoothIQ
+   - field is the same as above
+  This filter doesn't process the luma at all, and can be seen as a
+  shorter version of SSHiQ(rY,radius,-1, threshold, 255, false, false, field)
+
+Revision history
+- 1.4.0 (2003/09/02):
+  . Fixed HQ mode for radius > 4
+  . Added radius 7
+- 1.3.1 (2003/08/31):
+  . Speed improvement
+  . Increased the edge influence, therefore increasing the HiQ part :)
+- 1.3.0: Many fixes:
+  . Interlaced modes work without crashing
+  . Interlaced HiQ mode work (normal interlaced mode was used before)
+  . Add support for radii 5 and 6, at the cost of speed; could add
+    bigger radius but it's starting to be really useless
+  . Fixed convolution: all pixels intended to be used are now used
+  . Speed improvement; but with the above fix, you shouldn't notice it :)
+- 1.2.0: Fix for SmoothUV() function, warn in this readme for radius>4
+- 1.1.0: I think the first public release
