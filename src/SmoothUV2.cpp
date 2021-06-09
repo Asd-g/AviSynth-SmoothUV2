@@ -1,6 +1,4 @@
-#include <algorithm>
 #include <smmintrin.h>
-#include <string>
 #include <cmath>
 
 #include "avisynth.h"
@@ -310,12 +308,19 @@ AVS_FORCEINLINE void sshiq_sum_pixels_SSE41(const T* srcp, T* dstp, const int st
 template <typename T, bool interlaced, int bits, bool hqy, bool hqc>
 void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
 {
+    void (*sum_pixels)(const T * srcp, T * dstp, const int stride,
+        const int diff, const int width, const int height,
+        const int threshold,
+        const uint16_t * divinp, const int strength);
+
     const int vsize = (sizeof(T) == 2) ? 4 : 8;
     const int offs = (interlaced) ? 2 : 1;
     int planes_y[3] = { PLANAR_Y, PLANAR_U, PLANAR_V };
     int planecount = min(vi.NumComponents(), 3);
     for (int i = 0; i < planecount; ++i)
     {
+        int radius_w, radius_h;
+        int thr;
         const int h = dst->GetHeight(planes_y[i]);
 
         if constexpr (!hqy)
@@ -327,32 +332,14 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
             }
         }
 
-        int stride = src->GetPitch(planes_y[i]) / sizeof(T);
-        int dst_stride = dst->GetPitch(planes_y[i]) / sizeof(T);
-        const int w = src->GetRowSize(planes_y[i]) / sizeof(T);
-        const T* srcp = reinterpret_cast<const T*>(src->GetReadPtr(planes_y[i]));
-        T* dstp = reinterpret_cast<T*>(dst->GetWritePtr(planes_y[i]));        
-
-        const T* srcp2 = srcp + stride;
-        T* dstp2 = dstp + dst_stride;
-        int h2 = h;
-        int radius_w, radius_h;
-        int thr;
-
-        if (interlaced)
-        {
-            stride *= 2;
-            dst_stride *= 2;
-            h2 >>= 1;
-        }
-
-        void (*sum_pixels)(const T * srcp, T * dstp, const int stride,
-            const int diff, const int width, const int height,
-            const int threshold,
-            const uint16_t * divinp, const int strength);
-
         if (i == 0)
         {
+            if (_thresholdY == 0)
+            {
+                env->BitBlt(dst->GetWritePtr(planes_y[i]), dst->GetPitch(planes_y[i]), src->GetReadPtr(planes_y[i]), src->GetPitch(planes_y[i]), src->GetRowSize(planes_y[i]), h);
+                continue;
+            }
+
             radius_w = radiusy;
             radius_h = radiusy;
             thr = _thresholdY;
@@ -365,6 +352,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
         }
         else
         {
+            if (_thresholdC == 0)
+            {
+                env->BitBlt(dst->GetWritePtr(planes_y[i]), dst->GetPitch(planes_y[i]), src->GetReadPtr(planes_y[i]), src->GetPitch(planes_y[i]), src->GetRowSize(planes_y[i]), h);
+                continue;
+            }
+
             radius_w = radiuscw;
             radius_h = radiusch;
             thr = _thresholdC;
@@ -373,6 +366,23 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
                 sum_pixels = sshiq_sum_pixels_SSE41<T, bits>;
             else
                 sum_pixels = sum_pixels_SSE41<T, bits>;
+        }
+
+        int stride = src->GetPitch(planes_y[i]) / sizeof(T);
+        int dst_stride = dst->GetPitch(planes_y[i]) / sizeof(T);
+        const int w = src->GetRowSize(planes_y[i]) / sizeof(T);
+        const T* srcp = reinterpret_cast<const T*>(src->GetReadPtr(planes_y[i]));
+        T* dstp = reinterpret_cast<T*>(dst->GetWritePtr(planes_y[i]));        
+
+        const T* srcp2 = srcp + stride;
+        T* dstp2 = dstp + dst_stride;
+        int h2 = h;       
+
+        if (interlaced)
+        {
+            stride *= 2;
+            dst_stride *= 2;
+            h2 >>= 1;
         }
 
         for (int y = 0; y < h2; ++y)
@@ -455,10 +465,10 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SSHiQ2: radiusC must be between 1 and 7 (inclusive).");
         if (!vi.Is420() && (radiusC < 1 || radiusC > 3))
             env->ThrowError("SSHiQ2: radiusC must be between 1 and 3 (inclusive) for subsampling other than 4:2:0.");
-        if (thresholdY < 1 || thresholdY > 450)
-            env->ThrowError("SSHiQ2: thresholdY must be between 1 and 450 (inclusive).");
-        if (thresholdC < 1 || thresholdC > 450)
-            env->ThrowError("SSHiQ2: thresholdC must be between 1 and 450 (inclusive).");
+        if (thresholdY < 0 || thresholdY > 450)
+            env->ThrowError("SSHiQ2: thresholdY must be between 0 and 450 (inclusive).");
+        if (thresholdC < 0 || thresholdC > 450)
+            env->ThrowError("SSHiQ2: thresholdC must be between 0 and 450 (inclusive).");
         if (strength < 0 || strength > 255)
             env->ThrowError("SSHiQ2: strength must be between 0 and 255 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
@@ -472,8 +482,8 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SmoothUV2: radius must be between 1 and 7 (inclusive).");
         if (!vi.Is420() && (radiusC < 1 || radiusC > 3))
             env->ThrowError("SmoothUV2: radius must be between 1 and 3 (inclusive) for subsampling other than 4:2:0.");
-        if (thresholdC < 1 || thresholdC > 450)
-            env->ThrowError("SmoothUV2: threshold must be between 1 and 450 (inclusive).");
+        if (thresholdC < 0 || thresholdC > 450)
+            env->ThrowError("SmoothUV2: threshold must be between 0 and 450 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SmoothUV2: interlaced must be between -1 and 1 (inclusive).");
     }
@@ -675,7 +685,7 @@ AVSValue __cdecl Create_SmoothUV2(AVSValue args, void* user_data, IScriptEnviron
         1,
         args[1].AsInt(3),
         -1337,
-        args[2].AsInt(150),
+        args[2].AsInt(270),
         255,
         false,
         false,
