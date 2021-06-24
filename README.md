@@ -6,16 +6,12 @@ SSHiQ2 is general purpose spatial denoiser. This an updated version of SSHiQ fro
 
 # Requirement
 
-CPU with minimum supported instructions SSE4.1.
-
-# Tip
-
-Always use it with input > 8-bit when it's possible.
+AviSynth+.
 
 # Usage
 
 ```
-SmoothUV2 (clip, int "radius", int "threshold", int "interlaced")
+SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int "dither")
 ```
 
 ## Parameters:
@@ -41,10 +37,24 @@ SmoothUV2 (clip, int "radius", int "threshold", int "interlaced")
     1: Interlaced frame.\
     Default: -1.
     
+- opt\
+    Sets which cpu optimizations to use.\
+    -1: Auto-detect.\
+    0: Use C++ code.\
+    1: Use SSE4.1 code.\
+    Default: -1.
+    
+- dither\
+    How to convert the internal 16-bit calculation to the clip depth (when clip depth < 16-bit).\
+    -1: Rounding.\
+    0: Ordered dither.\
+    1: Error diffusion (Floyd-Steinberg).\
+    Default: -1.
+    
 ---
 
 ```
-SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", bool "HQC", int "interlaced")
+SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", bool "HQC", int "interlaced", int "opt", int "dither")
 ```
 
 ## Parameters:
@@ -83,6 +93,20 @@ SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", boo
     If frame properties aren't supported or there is no property "_FieldBased" - 0.\
     0: Progressive frame.\
     1: Interlaced frame.\
+    Default: -1.
+    
+- opt\
+    Sets which cpu optimizations to use.\
+    -1: Auto-detect.\
+    0: Use C++ code.\
+    1: Use SSE4.1 code.\
+    Default: -1.
+    
+- dither\
+    How to convert the internal 16-bit calculation to the clip depth (when clip depth < 16-bit).\
+    -1: Rounding.\
+    0: Ordered dither.\
+    1: Error diffusion (Floyd-Steinberg).\
     Default: -1.
 
 # Building

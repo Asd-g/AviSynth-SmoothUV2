@@ -1,3 +1,9 @@
+##### 4.2.0:
+    Added C++ code.
+    Added paramters opt and dither.
+    Changed internal calculation to 16-bit.
+    Dropped support for AviSynth 2.x.
+
 ##### 4.1.0:
     SmoothUV2 threshold changed back to 0..450 range.
     A bit improved calculation for 8-bit.
