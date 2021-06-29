@@ -1,3 +1,6 @@
+##### 4.2.1:
+    Improved speed for opt=0.
+
 ##### 4.2.0:
     Added C++ code.
     Added paramters opt and dither.

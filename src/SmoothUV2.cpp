@@ -5,7 +5,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_c(const uint8_t* origsp, const uint16
     int64_t sum = 0;
     int count = 0;
 
-    const int thres = llrint(sqrt((static_cast<double>(threshold) * threshold) / 3.0));
+    const int thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
     const int center_pixel = srcp[0];
 
     srcp = srcp - diff;
@@ -31,7 +31,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_c(const uint8_t* origsp, const uint16
         srcp += stride;
     }
 
-    *(dstp) = llrint((sum + ((count << 8) >> 1LL)) * divin[count] / 65535.0);
+    *(dstp) = (sum + ((count << 8) >> 1)) * divin[count] / 65535;
 }
 
 AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold)
@@ -39,11 +39,11 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_c(const uint8_t* origsp, const 
     int64_t sum = 0;
     int count = 0;
 
-    const int thres = llrint(sqrt((static_cast<double>(threshold) * threshold) / 3.0));
+    const int thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
 
     // Build edge values
     const int center_pixel = srcp[0];
-    const int add = *(origsp + (stride << 1)) + *(origsp + 1);
+    const int add = *(origsp + (static_cast<int64_t>(stride) << 1)) + *(origsp + 1);
     const int sllq = center_pixel << 1;
 
     // Store weight with edge bias
@@ -72,7 +72,7 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_c(const uint8_t* origsp, const 
         srcp += stride;
     }
 
-    *(dstp) = llrint(center_pixel * (65535.0 - str) / 65535.0) + llrint(str * llrint((sum + ((count << 8) >> 1)) * divin[count] / 65535.0) / 65535.0);
+    *(dstp) = center_pixel * (65535 - str) / 65535 + str * (sum + ((count << 8) >> 1)) * divin[count] / 65535 / 65535;
 }
 
 template <bool interlaced, bool hqy, bool hqc>
@@ -169,10 +169,10 @@ void SmoothUV2::smoothN_c(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment
 
                 const int xn = (x + radius_w < w - 1) ? x0 + radius_w + 1 : std::max(x0 + (w - x), 1);
 
-                (this->*sum_pixels)(origsp + (x << 1), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
+                (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
 
                 if (interlaced)
-                    (this->*sum_pixels)(origsp + (x << 1), srcp2 + x, dstp2 + x, stride, offset + x0, xn, yn, thr);
+                    (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp2 + x, dstp2 + x, stride, offset + x0, xn, yn, thr);
             }
 
             dstp += dst_stride;
@@ -193,7 +193,7 @@ void SmoothUV2::smoothN_c(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment
 
                 const int xn = (x + radius_w < w - 1) ? x0 + radius_w + 1 : std::max(x0 + (w - x), 1);
 
-                (this->*sum_pixels)(origsp + (x << 1LL), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
+                (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
             }
         }
     }
@@ -246,8 +246,10 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
     try { env->CheckVersion(8); }
     catch (const AvisynthError&) { has_at_least_v8 = false; }
 
-    for (int i = 1; i < 256; ++i)
-        divin[i] = static_cast<uint16_t>(std::min(llrint(65536.0 / i), 65535LL));
+    divin = std::make_unique<uint16_t[]>(257);
+
+    for (int i = 1; i < 257; ++i)
+        divin[i] = static_cast<uint16_t>(65535 / i);
 
     sse41 = (!!(env->GetCPUFlags() & CPUF_SSE4_1) && opt < 0) || opt == 1;
 
@@ -363,7 +365,7 @@ AVSValue __cdecl Create_SmoothUV2(AVSValue args, void* user_data, IScriptEnviron
         env->ThrowError("SmoothUV2: only 8..16-bit YUV planar format supported with minimum three planes.");
 
     const bool convert = bits < 16;
-    
+
     if (convert)
     {
         AVSValue args_[2] = { clip, 16 };

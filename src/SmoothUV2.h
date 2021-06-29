@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 #include "avisynth.h"
 
@@ -13,7 +14,7 @@ class SmoothUV2 : public GenericVideoFilter
     bool hqy, hqc;
     int _interlaced;
     bool has_at_least_v8;
-    uint16_t divin[256];
+    std::unique_ptr<uint16_t[]> divin;
     int64_t field_based;
     bool sse41;
 

@@ -25,7 +25,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
     __m128i sum = zeroes;
     __m128i count = zeroes;
 
-    const __m128i thres = _mm_set1_epi32(static_cast<uint32_t>(llrint(sqrt((static_cast<double>(threshold) * threshold) / 3))));
+    const __m128i thres = _mm_set1_epi32(sqrt(static_cast<int64_t>(threshold) * threshold / 3));
     const __m128i center_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp)), zeroes);
 
     srcp = srcp - diff;
@@ -98,11 +98,11 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
     __m128i sum = zeroes;
     __m128i count = zeroes;
 
-    const __m128i thres = _mm_set1_epi32(static_cast<uint32_t>(llrint(sqrt((static_cast<double>(threshold) * threshold) / 3))));
+    const __m128i thres = _mm_set1_epi32(sqrt(static_cast<int64_t>(threshold) * threshold / 3));
 
     // Build edge values
     const __m128i center_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp)), zeroes);
-    const __m128i add = _mm_add_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + (stride << 1))), zeroes), _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + 1)), zeroes));
+    const __m128i add = _mm_add_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + (static_cast<int64_t>(stride) << 1))), zeroes), _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + 1)), zeroes));
     const __m128i sllq = _mm_slli_epi32(center_pixel, 1);
 
     // Store weight with edge bias
@@ -171,7 +171,7 @@ template <bool interlaced, bool hqy, bool hqc>
 void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
 {
     void (SmoothUV2:: * sum_pixels)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold);
-    void (SmoothUV2:: * sum_pixels_c)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold);
+    void (SmoothUV2:: * sum_pix_c)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold);
 
     const int offs = (interlaced) ? 2 : 1;
     int planes_y[3] = { PLANAR_Y, PLANAR_U, PLANAR_V };
@@ -206,12 +206,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
             if constexpr (hqy)
             {
                 sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
-                sum_pixels_c = &SmoothUV2::sshiq_sum_pixels_c;
+                sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
                 sum_pixels = &SmoothUV2::sum_pixels_SSE41;
-                sum_pixels_c = &SmoothUV2::sum_pixels_c;
+                sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
         else
@@ -229,12 +229,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
             if constexpr (hqc)
             {
                 sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
-                sum_pixels_c = &SmoothUV2::sshiq_sum_pixels_c;
+                sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
                 sum_pixels = &SmoothUV2::sum_pixels_SSE41;
-                sum_pixels_c = &SmoothUV2::sum_pixels_c;
+                sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
 
@@ -274,30 +274,30 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
                 const int x0 = (x < radius_w) ? x : radius_w;
                 const int xn = x0 + radius_w + 1;
 
-                (this->*sum_pixels_c)(origsp + (x << 1), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
+                (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + x0, xn, yn, thr);
 
                 if (interlaced)
-                    (this->*sum_pixels_c)(origsp + (x << 1), srcp2 + x, dstp2 + x, stride, offset + x0, xn, yn, thr);
+                    (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp2 + x, dstp2 + x, stride, offset + x0, xn, yn, thr);
             }
 
             for (int x = 16; x < col; x += 4)
             {
                 const int xn = (radius_w << 1) + 1;
 
-                (this->*sum_pixels)(origsp + (x << 1), srcp + x, dstp + x, stride, offset + radius_w, xn, yn, thr);
+                (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + radius_w, xn, yn, thr);
 
                 if (interlaced)
-                    (this->*sum_pixels)(origsp + (x << 1), srcp2 + x, dstp2 + x, stride, offset + radius_w, xn, yn, thr);
+                    (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp2 + x, dstp2 + x, stride, offset + radius_w, xn, yn, thr);
             }
 
             for (int x = col; x < w; ++x)
             {
                 const int xn = (x + radius_w < w - 1) ? (radius_w << 1) + 1 : std::max(radius_w + (w - x), 1);
 
-                (this->*sum_pixels_c)(origsp + (x << 1), srcp + x, dstp + x, stride, offset + radius_w, xn, yn, thr);
+                (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + radius_w, xn, yn, thr);
 
                 if (interlaced)
-                    (this->*sum_pixels_c)(origsp + (x << 1), srcp2 + x, dstp2 + x, stride, offset + radius_w, xn, yn, thr);
+                    (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp2 + x, dstp2 + x, stride, offset + radius_w, xn, yn, thr);
             }
 
             dstp += dst_stride;
@@ -316,14 +316,14 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
             {
                 const int x0 = (x < radius_w) ? x : radius_w;
 
-                (this->*sum_pixels_c)(origsp + (x << 1LL), srcp + x, dstp + x, stride, offset + x0, x0 + radius_w + 1, yn, thr);
+                (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + x0, x0 + radius_w + 1, yn, thr);
             }
 
             for (int x = 16; x < col; x += 4)
-                (this->*sum_pixels)(origsp + (x << 1), srcp + x, dstp + x, stride, offset + radius_w, (radius_w << 1) + 1, yn, thr);
+                (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + radius_w, (radius_w << 1) + 1, yn, thr);
 
             for (int x = col; x < w; ++x)
-                (this->*sum_pixels_c)(origsp + (x << 1LL), srcp + x, dstp + x, stride, offset + radius_w, (x + radius_w < w - 1) ? (radius_w << 1) + 1 : std::max(radius_w + (w - x), 1), yn, thr);
+                (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + radius_w, (x + radius_w < w - 1) ? (radius_w << 1) + 1 : std::max(radius_w + (w - x), 1), yn, thr);
         }
     }
 }
