@@ -41,7 +41,8 @@ SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int
     Sets which cpu optimizations to use.\
     -1: Auto-detect.\
     0: Use C++ code.\
-    1: Use SSE4.1 code.\
+    1: Use SSE2 code.\
+    2: Use SSE4.1 code.\
     Default: -1.
     
 - dither\
@@ -54,7 +55,7 @@ SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int
 ---
 
 ```
-SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", bool "HQC", int "interlaced", int "opt", int "dither")
+SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "strY", int "strC", bool "HQY", bool "HQC", int "interlaced", int "opt", int "dither")
 ```
 
 ## Parameters:
@@ -77,10 +78,11 @@ SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", boo
     Larger values smooth more.\
     Default: tY = 20; tC =30.
     
-- str\
-    Strength is only used for HiQ mode and it controls how much of the smoothed version should be used at best for calculating the new pixel.\
+- strY, strC\
+    Strength respectively for luma and chroma planes.\
+    It is only used for HiQ mode and it controls how much of the smoothed version should be used at best for calculating the new pixel.\
     Must be between 0 and 255.\
-    Default: 240.
+    Default: strY = 240; strC = strY.
     
 - HQY, HQC\
     Enables HiQ mode.\
@@ -99,7 +101,8 @@ SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "str", bool "HQY", boo
     Sets which cpu optimizations to use.\
     -1: Auto-detect.\
     0: Use C++ code.\
-    1: Use SSE4.1 code.\
+    1: Use SSE2 code.\
+    2: Use SSE4.1 code.\
     Default: -1.
     
 - dither\

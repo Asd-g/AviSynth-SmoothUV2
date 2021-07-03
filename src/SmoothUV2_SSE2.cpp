@@ -1,13 +1,57 @@
-#include <smmintrin.h>
+#include <emmintrin.h>
 
 #include "SmoothUV2.h"
 
-static AVS_FORCEINLINE __m128i mul_u32(const __m128i a, const __m128i b, const float peak)
+static AVS_FORCEINLINE __m128i mul_u32_(const __m128i a, const __m128i b, const float peak)
 {
     return _mm_cvtps_epi32(_mm_div_ps(_mm_mul_ps(_mm_cvtepi32_ps(a), _mm_cvtepi32_ps(b)), _mm_set_ps1(peak)));
 }
 
-AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int)
+static AVS_FORCEINLINE __m128i packus(const __m128i a, const __m128i b)
+{
+    const static __m128i val_32 = _mm_set_epi32(0x8000, 0x8000, 0x8000, 0x8000);
+
+    return _mm_add_epi16(_mm_packs_epi32(_mm_sub_epi32(a, val_32), _mm_sub_epi32(b, val_32)), _mm_set_epi16(0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000));
+}
+
+static AVS_FORCEINLINE __m128i abs(const __m128i a)
+{
+    const __m128i mask = _mm_cmplt_epi32(a, _mm_setzero_si128());
+    return _mm_add_epi32(_mm_xor_si128(a, mask), _mm_srli_epi32(mask, 31));
+}
+
+static AVS_FORCEINLINE __m128i insert(const __m128i a, int i, const int imm8)
+{
+    switch (imm8)
+    {
+        case 0: return _mm_insert_epi16(_mm_insert_epi16(a, i, 0), i << 16, 1);
+        case 1: return _mm_insert_epi16(_mm_insert_epi16(a, i, 2), i << 16, 3);
+        case 2: return _mm_insert_epi16(_mm_insert_epi16(a, i, 4), i << 16, 5);
+        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 6), i << 16, 7);
+    }
+}
+
+static AVS_FORCEINLINE __m128i insert_hi(const __m128i a, int i, const int imm8)
+{
+    switch (imm8)
+    {
+        case 0: return _mm_insert_epi16(_mm_insert_epi16(a, i, 0), i >> 16, 1);
+        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 2), i >> 16, 3);
+    }
+}
+
+static AVS_FORCEINLINE int extract(const __m128i a, const int imm)
+{
+    switch (imm)
+    {
+        case 0: return _mm_cvtsi128_si32(_mm_srli_si128((a), 0));
+        case 1: return _mm_cvtsi128_si32(_mm_srli_si128((a), 4));
+        case 2: return _mm_cvtsi128_si32(_mm_srli_si128((a), 8));
+        default: return _mm_cvtsi128_si32(_mm_srli_si128((a), 12));
+    }
+}
+
+AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int)
 {
     const __m128i zeroes = _mm_setzero_si128();
     __m128i sum = zeroes;
@@ -24,7 +68,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
         {
             const __m128i neighbour_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)), zeroes);
 
-            const __m128i abs_diff = _mm_abs_epi32(_mm_sub_epi32(center_pixel, neighbour_pixel));
+            const __m128i abs_diff = abs(_mm_sub_epi32(center_pixel, neighbour_pixel));
 
             // Absolute difference less than thres
             const __m128i mask = _mm_cmpgt_epi32(thres, abs_diff);
@@ -43,23 +87,23 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
     sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
 
     __m128i divres_hi = [&]() {
-        divres_hi = _mm_insert_epi32(divres_hi, divin[_mm_extract_epi32(count, 0)], 0);
-        return _mm_insert_epi32(divres_hi, divin[_mm_extract_epi32(count, 1)], 1);
+        divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
+        return insert(divres_hi, divin[extract(count, 1)], 1);
     }();
 
     __m128i divres_lo = [&]() {
-        divres_lo = _mm_insert_epi32(divres_lo, divin[_mm_extract_epi32(count, 2)], 0);
-        return _mm_insert_epi32(divres_lo, divin[_mm_extract_epi32(count, 3)], 1);
+        divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
+        return insert(divres_lo, divin[extract(count, 3)], 1);
     }();
 
     __m128i sum_hi = [&]() {
-        sum_hi = _mm_insert_epi32(sum_hi, _mm_extract_epi32(sum, 0), 0);
-        return _mm_insert_epi32(sum_hi, _mm_extract_epi32(sum, 1), 1);
+        sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
+        return insert_hi(sum_hi, extract(sum, 1), 1);
     }();
 
     __m128i sum_lo = [&]() {
-        sum_lo = _mm_insert_epi32(sum_lo, _mm_extract_epi32(sum, 2), 0);
-        return _mm_insert_epi32(sum_lo, _mm_extract_epi32(sum, 3), 1);
+        sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
+        return insert_hi(sum_lo, extract(sum, 3), 1);
     }();
 
     const __m128i mul_hi = _mm_mul_epu32(_mm_shuffle_epi32(sum_hi, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_hi, _MM_SHUFFLE(3, 1, 2, 0)));
@@ -71,16 +115,16 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
     const __m128i lo1 = _mm_unpackhi_epi16(mul_lo, zeroes);
 
     __m128i result = [&]() {
-        result = _mm_insert_epi32(result, _mm_extract_epi32(hi, 1), 0);
-        result = _mm_insert_epi32(result, _mm_extract_epi32(hi1, 1), 1);
-        result = _mm_insert_epi32(result, _mm_extract_epi32(lo, 1), 2);
-        return _mm_insert_epi32(result, _mm_extract_epi32(lo1, 1), 3);
+        result = insert(result, extract(hi, 1), 0);
+        result = insert(result, extract(hi1, 1), 1);
+        result = insert(result, extract(lo, 1), 2);
+        return insert(result, extract(lo1, 1), 3);
     }();
 
-    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), _mm_packus_epi32(result, result));
+    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), packus(result, result));
 }
 
-AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
+AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
 {
     const __m128i zeroes = _mm_setzero_si128();
     __m128i sum = zeroes;
@@ -94,7 +138,10 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
     const __m128i sllq = _mm_slli_epi32(center_pixel, 1);
 
     // Store weight with edge bias
-    const __m128i str = _mm_min_epu32(_mm_sub_epi32(_mm_set1_epi32(strength), _mm_or_si128(_mm_sub_epi32(sllq, add), _mm_sub_epi32(add, sllq))), _mm_set1_epi32(65535));
+    const __m128i sub = _mm_sub_epi32(_mm_set1_epi32(strength), _mm_or_si128(_mm_sub_epi32(sllq, add), _mm_sub_epi32(add, sllq)));
+    const __m128i peak = _mm_set1_epi32(65535);
+    const __m128i greater = _mm_cmpgt_epi32(sub, peak);
+    const __m128i str = _mm_or_si128(_mm_and_si128(greater, peak), _mm_andnot_si128(greater, sub));
 
     srcp = srcp - diff;
 
@@ -103,7 +150,7 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
         for (int x = 0; x < width; ++x)
         {
             const __m128i neighbour_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)), zeroes);
-            const __m128i mask = _mm_cmpgt_epi32(thres, _mm_abs_epi32(_mm_sub_epi32(center_pixel, neighbour_pixel)));
+            const __m128i mask = _mm_cmpgt_epi32(thres, abs(_mm_sub_epi32(center_pixel, neighbour_pixel)));
             sum = _mm_add_epi32(sum, _mm_and_si128(neighbour_pixel, mask));
             count = _mm_sub_epi32(count, mask);
         }
@@ -114,23 +161,23 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
     sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
 
     __m128i divres_hi = [&]() {
-        divres_hi = _mm_insert_epi32(divres_hi, divin[_mm_extract_epi32(count, 0)], 0);
-        return _mm_insert_epi32(divres_hi, divin[_mm_extract_epi32(count, 1)], 1);
+        divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
+        return insert(divres_hi, divin[extract(count, 1)], 1);
     }();
 
     __m128i divres_lo = [&]() {
-        divres_lo = _mm_insert_epi32(divres_lo, divin[_mm_extract_epi32(count, 2)], 0);
-        return _mm_insert_epi32(divres_lo, divin[_mm_extract_epi32(count, 3)], 1);
+        divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
+        return insert(divres_lo, divin[extract(count, 3)], 1);
     }();
 
     __m128i sum_hi = [&]() {
-        sum_hi = _mm_insert_epi32(sum_hi, _mm_extract_epi32(sum, 0), 0);
-        return _mm_insert_epi32(sum_hi, _mm_extract_epi32(sum, 1), 1);
+        sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
+        return insert_hi(sum_hi, extract(sum, 1), 1);
     }();
 
     __m128i sum_lo = [&]() {
-        sum_lo = _mm_insert_epi32(sum_lo, _mm_extract_epi32(sum, 2), 0);
-        return _mm_insert_epi32(sum_lo, _mm_extract_epi32(sum, 3), 1);
+        sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
+        return insert_hi(sum_lo, extract(sum, 3), 1);
     }();
 
     __m128i mul_hi = _mm_mul_epu32(_mm_shuffle_epi32(sum_hi, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_hi, _MM_SHUFFLE(3, 1, 2, 0)));
@@ -142,21 +189,21 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
     __m128i lo1 = _mm_unpackhi_epi16(mul_lo, zeroes);
 
     __m128i result = [&]() {
-        result = _mm_insert_epi32(result, _mm_extract_epi32(hi, 1), 0);
-        result = _mm_insert_epi32(result, _mm_extract_epi32(hi1, 1), 1);
-        result = _mm_insert_epi32(result, _mm_extract_epi32(lo, 1), 2);
-        return _mm_insert_epi32(result, _mm_extract_epi32(lo1, 1), 3);
+        result = insert(result, extract(hi, 1), 0);
+        result = insert(result, extract(hi1, 1), 1);
+        result = insert(result, extract(lo, 1), 2);
+        return insert(result, extract(lo1, 1), 3);
     }();
 
     // Weight with original depending on edge value
-    result = _mm_add_epi32(mul_u32(center_pixel, _mm_sub_epi32(_mm_set1_epi32(65535), str), 65535.0f),
-        mul_u32(str, result, 65535.0f));
+    result = _mm_add_epi32(mul_u32_(center_pixel, _mm_sub_epi32(_mm_set1_epi32(65535), str), 65535.0f),
+        mul_u32_(str, result, 65535.0f));
 
-    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), _mm_packus_epi32(result, result));
+    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), packus(result, result));
 }
 
 template <bool interlaced, bool hqy, bool hqc>
-void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
+void SmoothUV2::smoothN_SSE2(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
 {
     void (SmoothUV2:: * sum_pixels)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
     void (SmoothUV2:: * sum_pix_c)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
@@ -195,12 +242,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
 
             if constexpr (hqy)
             {
-                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE2;
                 sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
-                sum_pixels = &SmoothUV2::sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sum_pixels_SSE2;
                 sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
@@ -219,12 +266,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
 
             if constexpr (hqc)
             {
-                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE2;
                 sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
-                sum_pixels = &SmoothUV2::sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sum_pixels_SSE2;
                 sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
@@ -319,12 +366,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
     }
 }
 
-template void SmoothUV2::smoothN_SSE41<true, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<true, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<true, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<true, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<true, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
 
-template void SmoothUV2::smoothN_SSE41<false, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<false, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<false, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<false, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_SSE2<false, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);

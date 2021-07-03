@@ -8,29 +8,35 @@
 
 class SmoothUV2 : public GenericVideoFilter
 {
-    int _thresholdY, _thresholdC;
-    int _strength;
     int radiusy, radiuscw, radiusch;
+    int _thresholdY, _thresholdC;
+    int strengthY, strengthC;    
     bool hqy, hqc;
     int _interlaced;
     bool has_at_least_v8;
     std::unique_ptr<uint16_t[]> divin;
     int64_t field_based;
-    bool sse41;
+    bool sse2, sse41;
 
     template <bool interlaced, bool hqy, bool hqc>
     void smoothN_c(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-    void sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold);
-    void sshiq_sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold);
+    void sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
+    void sshiq_sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
+
+    template <bool interlaced, bool hqy, bool hqc>
+    void smoothN_SSE2(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+    void sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
+    void sshiq_sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
+
     template <bool interlaced, bool hqy, bool hqc>
     void smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-    void sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold);
-    void sshiq_sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold);
+    void sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
+    void sshiq_sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
 
     void (SmoothUV2::* smooth)(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
 
 public:
-    SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int thresholdC, int strength, bool HQY, bool HQC, int interlaced, int opt, IScriptEnvironment* env);
+    SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int thresholdC, int strY, int strC, bool HQY, bool HQC, int interlaced, int opt, IScriptEnvironment* env);
 
     int __stdcall SetCacheHints(int cachehints, int frame_range) override
     {

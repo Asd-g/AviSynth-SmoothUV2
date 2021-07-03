@@ -1,3 +1,7 @@
+##### 4.3.0:
+    Added SSE2 code.
+    Parameter str replaced by strY and strC.
+
 ##### 4.2.1:
     Improved speed for opt=0.
 
