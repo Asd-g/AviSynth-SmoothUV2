@@ -1,3 +1,6 @@
+##### 4.3.1:
+    Added SSSE3 code.
+
 ##### 4.3.0:
     Added SSE2 code.
     Parameter str replaced by strY and strC.

@@ -16,7 +16,7 @@ class SmoothUV2 : public GenericVideoFilter
     bool has_at_least_v8;
     std::unique_ptr<uint16_t[]> divin;
     int64_t field_based;
-    bool sse2, sse41;
+    bool sse2, ssse3, sse41;
 
     template <bool interlaced, bool hqy, bool hqc>
     void smoothN_c(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
@@ -27,6 +27,11 @@ class SmoothUV2 : public GenericVideoFilter
     void smoothN_SSE2(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
     void sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
     void sshiq_sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
+
+    template <bool interlaced, bool hqy, bool hqc>
+    void smoothN_SSSE3(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+    void sum_pixels_SSSE3(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
+    void sshiq_sum_pixels_SSSE3(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
 
     template <bool interlaced, bool hqy, bool hqc>
     void smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);

@@ -36,7 +36,7 @@ static AVS_FORCEINLINE __m128i insert_hi(const __m128i a, int i, const int imm8)
     switch (imm8)
     {
         case 0: return _mm_insert_epi16(_mm_insert_epi16(a, i, 0), i >> 16, 1);
-        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 2), i >> 16, 3);
+        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 4), i >> 16, 5);
     }
 }
 
@@ -88,37 +88,32 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE2(const uint8_t* origsp, const uin
 
     __m128i divres_hi = [&]() {
         divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
-        return insert(divres_hi, divin[extract(count, 1)], 1);
+        return insert(divres_hi, divin[extract(count, 1)], 2);
     }();
 
     __m128i divres_lo = [&]() {
         divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
-        return insert(divres_lo, divin[extract(count, 3)], 1);
+        return insert(divres_lo, divin[extract(count, 3)], 2);
     }();
 
     __m128i sum_hi = [&]() {
         sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
-        return insert_hi(sum_hi, extract(sum, 1), 1);
+        return insert_hi(sum_hi, extract(sum, 1), 2);
     }();
 
     __m128i sum_lo = [&]() {
         sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
-        return insert_hi(sum_lo, extract(sum, 3), 1);
+        return insert_hi(sum_lo, extract(sum, 3), 2);
     }();
 
-    const __m128i mul_hi = _mm_mul_epu32(_mm_shuffle_epi32(sum_hi, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_hi, _MM_SHUFFLE(3, 1, 2, 0)));
-    const __m128i mul_lo = _mm_mul_epu32(_mm_shuffle_epi32(sum_lo, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_lo, _MM_SHUFFLE(3, 1, 2, 0)));
-
-    const __m128i hi = _mm_unpacklo_epi16(mul_hi, zeroes);
-    const __m128i hi1 = _mm_unpackhi_epi16(mul_hi, zeroes);
-    const __m128i lo = _mm_unpacklo_epi16(mul_lo, zeroes);
-    const __m128i lo1 = _mm_unpackhi_epi16(mul_lo, zeroes);
+    const __m128i mul_hi = _mm_mul_epu32(sum_hi, divres_hi);
+    const __m128i mul_lo = _mm_mul_epu32(sum_lo, divres_lo);
 
     __m128i result = [&]() {
-        result = insert(result, extract(hi, 1), 0);
-        result = insert(result, extract(hi1, 1), 1);
-        result = insert(result, extract(lo, 1), 2);
-        return insert(result, extract(lo1, 1), 3);
+        result = insert(result, extract(_mm_unpacklo_epi16(mul_hi, zeroes), 1), 0);
+        result = insert(result, extract(_mm_unpackhi_epi16(mul_hi, zeroes), 1), 1);
+        result = insert(result, extract(_mm_unpacklo_epi16(mul_lo, zeroes), 1), 2);
+        return insert(result, extract(_mm_unpackhi_epi16(mul_lo, zeroes), 1), 3);
     }();
 
     _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), packus(result, result));
@@ -162,37 +157,32 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE2(const uint8_t* origsp, con
 
     __m128i divres_hi = [&]() {
         divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
-        return insert(divres_hi, divin[extract(count, 1)], 1);
+        return insert(divres_hi, divin[extract(count, 1)], 2);
     }();
 
     __m128i divres_lo = [&]() {
         divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
-        return insert(divres_lo, divin[extract(count, 3)], 1);
+        return insert(divres_lo, divin[extract(count, 3)], 2);
     }();
 
     __m128i sum_hi = [&]() {
         sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
-        return insert_hi(sum_hi, extract(sum, 1), 1);
+        return insert_hi(sum_hi, extract(sum, 1), 2);
     }();
 
     __m128i sum_lo = [&]() {
         sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
-        return insert_hi(sum_lo, extract(sum, 3), 1);
+        return insert_hi(sum_lo, extract(sum, 3), 2);
     }();
 
-    __m128i mul_hi = _mm_mul_epu32(_mm_shuffle_epi32(sum_hi, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_hi, _MM_SHUFFLE(3, 1, 2, 0)));
-    __m128i mul_lo = _mm_mul_epu32(_mm_shuffle_epi32(sum_lo, _MM_SHUFFLE(3, 1, 2, 0)), _mm_shuffle_epi32(divres_lo, _MM_SHUFFLE(3, 1, 2, 0)));
-
-    __m128i hi = _mm_unpacklo_epi16(mul_hi, zeroes);
-    __m128i hi1 = _mm_unpackhi_epi16(mul_hi, zeroes);
-    __m128i lo = _mm_unpacklo_epi16(mul_lo, zeroes);
-    __m128i lo1 = _mm_unpackhi_epi16(mul_lo, zeroes);
+    __m128i mul_hi = _mm_mul_epu32(sum_hi, divres_hi);
+    __m128i mul_lo = _mm_mul_epu32(sum_lo, divres_lo);
 
     __m128i result = [&]() {
-        result = insert(result, extract(hi, 1), 0);
-        result = insert(result, extract(hi1, 1), 1);
-        result = insert(result, extract(lo, 1), 2);
-        return insert(result, extract(lo1, 1), 3);
+        result = insert(result, extract(_mm_unpacklo_epi16(mul_hi, zeroes), 1), 0);
+        result = insert(result, extract(_mm_unpackhi_epi16(mul_hi, zeroes), 1), 1);
+        result = insert(result, extract(_mm_unpacklo_epi16(mul_lo, zeroes), 1), 2);
+        return insert(result, extract(_mm_unpackhi_epi16(mul_lo, zeroes), 1), 3);
     }();
 
     // Weight with original depending on edge value

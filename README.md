@@ -42,7 +42,8 @@ SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int
     -1: Auto-detect.\
     0: Use C++ code.\
     1: Use SSE2 code.\
-    2: Use SSE4.1 code.\
+    2: Use SSSE3 code.\
+    3: Use SSE4.1 code.\
     Default: -1.
     
 - dither\
@@ -102,7 +103,8 @@ SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "strY", int "strC", bo
     -1: Auto-detect.\
     0: Use C++ code.\
     1: Use SSE2 code.\
-    2: Use SSE4.1 code.\
+    2: Use SSSE3 code.\
+    3: Use SSE4.1 code.\
     Default: -1.
     
 - dither\

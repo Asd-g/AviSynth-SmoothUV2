@@ -223,12 +223,14 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SSHiQ2: strC must be between 0 and 255 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SSHiQ2: interlaced must be between -1 and 1 (inclusive).");
-        if (opt < -1 || opt > 2)
-            env->ThrowError("SSHiQ2: opt must be between -1 and 2 (inclusive).");
+        if (opt < -1 || opt > 3)
+            env->ThrowError("SSHiQ2: opt must be between -1 and 3 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SSHiQ2: opt=1 requires SSE2.");
-        if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSE4_1))
-            env->ThrowError("SSHiQ2: opt=1 requires SSE4.1.");
+        if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
+            env->ThrowError("SSHiQ2: opt=2 requires SSSE3.");
+        if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
+            env->ThrowError("SSHiQ2: opt=3 requires SSE4.1.");
     }
     else
     {
@@ -240,12 +242,14 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SmoothUV2: threshold must be between 0 and 450 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SmoothUV2: interlaced must be between -1 and 1 (inclusive).");
-        if (opt < -1 || opt > 2)
-            env->ThrowError("SmoothUV2: opt must be between -1 and 2 (inclusive).");
+        if (opt < -1 || opt > 3)
+            env->ThrowError("SmoothUV2: opt must be between -1 and 3 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SmoothUV2: opt=1 requires SSE2.");
-        if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSE4_1))
-            env->ThrowError("SmoothUV2: opt=1 requires SSE4.1.");
+        if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
+            env->ThrowError("SmoothUV2: opt=2 requires SSSE3.");
+        if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
+            env->ThrowError("SmoothUV2: opt=3 requires SSE4.1.");
     }
 
     _thresholdY = (thresholdY != -1337) ? (thresholdY * 65535 / 255) : thresholdY;
@@ -269,8 +273,9 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
     for (int i = 1; i < 257; ++i)
         divin[i] = static_cast<uint16_t>(65535 / i);
 
-    sse2 = (!!(env->GetCPUFlags() & CPUF_SSE2) && opt < 0) || opt == 1;
-    sse41 = (!!(env->GetCPUFlags() & CPUF_SSE4_1) && opt < 0) || opt == 2;
+    sse2 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSE2)) || opt == 1;
+    ssse3 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSSE3)) || opt == 2;
+    sse41 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSE4_1)) || opt == 3;
 
     if (_interlaced > -1)
         field_based = _interlaced;
@@ -297,6 +302,23 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
                     smooth = (field_based) ? &SmoothUV2::smoothN_SSE41<true, false, true> : &SmoothUV2::smoothN_SSE41<false, false, true>;
                 else
                     smooth = (field_based) ? &SmoothUV2::smoothN_SSE41<true, false, false> : &SmoothUV2::smoothN_SSE41<false, false, false>;
+            }
+        }
+        else if (ssse3)
+        {
+            if (HQY)
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, true, true> : &SmoothUV2::smoothN_SSSE3<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, true, false> : &SmoothUV2::smoothN_SSSE3<false, true, false>;
+            }
+            else
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, false, true> : &SmoothUV2::smoothN_SSSE3<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, false, false> : &SmoothUV2::smoothN_SSSE3<false, false, false>;
             }
         }
         else if (sse2)
@@ -365,6 +387,23 @@ PVideoFrame __stdcall SmoothUV2::GetFrame(int n, IScriptEnvironment* env)
                     smooth = (field_based) ? &SmoothUV2::smoothN_SSE41<true, false, true> : &SmoothUV2::smoothN_SSE41<false, false, true>;
                 else
                     smooth = (field_based) ? &SmoothUV2::smoothN_SSE41<true, false, false> : &SmoothUV2::smoothN_SSE41<false, false, false>;
+            }
+        }
+        else if (ssse3)
+        {
+            if (hqy)
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, true, true> : &SmoothUV2::smoothN_SSSE3<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, true, false> : &SmoothUV2::smoothN_SSSE3<false, true, false>;
+            }
+            else
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, false, true> : &SmoothUV2::smoothN_SSSE3<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_SSSE3<true, false, false> : &SmoothUV2::smoothN_SSSE3<false, false, false>;
             }
         }
         else if (sse2)

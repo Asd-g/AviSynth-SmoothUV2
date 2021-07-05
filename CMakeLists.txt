@@ -16,6 +16,7 @@ endif ()
 add_library(smoothuv2 SHARED
     src/SmoothUV2.cpp
     src/SmoothUV2_SSE2.cpp
+    src/SmoothUV2_SSSE3.cpp
     src/SmoothUV2_SSE41.cpp
 )
 
@@ -26,6 +27,7 @@ endif()
 message(STATUS "Build type - ${CMAKE_BUILD_TYPE}")
 
 set_source_files_properties(src/SmoothUV2_SSE2.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-msse2")
+set_source_files_properties(src/SmoothUV2_SSSE3.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-mssse3")
 set_source_files_properties(src/SmoothUV2_SSE41.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-msse4.1")
 
 target_include_directories(smoothuv2 PRIVATE

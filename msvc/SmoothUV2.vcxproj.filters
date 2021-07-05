@@ -24,6 +24,9 @@
     <ClCompile Include="..\src\SmoothUV2_SSE41.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\SmoothUV2_SSSE3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\SmoothUV2.rc">
