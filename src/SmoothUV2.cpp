@@ -224,7 +224,7 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SSHiQ2: interlaced must be between -1 and 1 (inclusive).");
         if (opt < -1 || opt > 5)
-            env->ThrowError("SSHiQ2: opt must be between -1 and 4 (inclusive).");
+            env->ThrowError("SSHiQ2: opt must be between -1 and 5 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SSHiQ2: opt=1 requires SSE2.");
         if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
@@ -232,9 +232,9 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
         if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
             env->ThrowError("SSHiQ2: opt=3 requires SSE4.1.");
         if (opt == 4 && !(env->GetCPUFlags() & CPUF_AVX2))
-            env->ThrowError("SSHiQ2: opt=3 requires AVX2.");
+            env->ThrowError("SSHiQ2: opt=4 requires AVX2.");
         if (opt == 5 && !(env->GetCPUFlags() & CPUF_AVX512F))
-            env->ThrowError("SSHiQ2: opt=3 requires AVX512F.");
+            env->ThrowError("SSHiQ2: opt=5 requires AVX512F.");
     }
     else
     {
@@ -247,7 +247,7 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SmoothUV2: interlaced must be between -1 and 1 (inclusive).");
         if (opt < -1 || opt > 5)
-            env->ThrowError("SmoothUV2: opt must be between -1 and 4 (inclusive).");
+            env->ThrowError("SmoothUV2: opt must be between -1 and 5 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SmoothUV2: opt=1 requires SSE2.");
         if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
@@ -255,9 +255,9 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
         if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
             env->ThrowError("SmoothUV2: opt=3 requires SSE4.1.");
         if (opt == 4 && !(env->GetCPUFlags() & CPUF_AVX2))
-            env->ThrowError("SmoothUV2: opt=3 requires AVX2.");
+            env->ThrowError("SmoothUV2: opt=4 requires AVX2.");
         if (opt == 5 && !(env->GetCPUFlags() & CPUF_AVX512F))
-            env->ThrowError("SmoothUV2: opt=3 requires AVX512F.");
+            env->ThrowError("SmoothUV2: opt=5 requires AVX512F.");
     }
 
     _thresholdY = (thresholdY != -1337) ? (thresholdY * 65535 / 255) : thresholdY;
