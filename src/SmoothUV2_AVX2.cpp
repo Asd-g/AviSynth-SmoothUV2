@@ -1,13 +1,13 @@
 #include "SmoothUV2.h"
 
-AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int)
+AVS_FORCEINLINE void SmoothUV2::sum_pixels_AVX2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int)
 {
-    const Vec4i zeroes = zero_si128();
-    Vec4i sum = zeroes;
-    Vec4i count = zeroes;
+    const Vec8i zeroes = zero_si256();
+    Vec8i sum = zeroes;
+    Vec8i count = zeroes;
 
-    const Vec4i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
-    const Vec4i center_pixel = Vec4i().load_4us(srcp);
+    const Vec8i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
+    const Vec8i center_pixel = Vec8i().load_8us(srcp);
 
     srcp = srcp - diff;
 
@@ -15,12 +15,12 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
     {
         for (int x = 0; x < width; ++x)
         {
-            const Vec4i neighbour_pixel = Vec4i().load_4us(srcp + x);
+            const Vec8i neighbour_pixel = Vec8i().load_8us(srcp + x);
 
-            const Vec4i abs_diff = abs(center_pixel - neighbour_pixel);
+            const Vec8i abs_diff = abs(center_pixel - neighbour_pixel);
 
             // Absolute difference less than thres
-            const Vec4ib mask = thres > abs_diff;
+            const Vec8ib mask = thres > abs_diff;
 
             // Sum up the pixels that meet the criteria
             sum = sum + (neighbour_pixel & mask);
@@ -32,33 +32,37 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE41(const uint8_t* origsp, const ui
         srcp += stride;
     }
 
-    Vec4i divres = [&]() {
+    Vec8i divres = [&]() {
         divres = divres.insert(0, divin[count.extract(0)]);
         divres = divres.insert(1, divin[count.extract(1)]);
         divres = divres.insert(2, divin[count.extract(2)]);
-        return divres.insert(3, divin[count.extract(3)]);
+        divres = divres.insert(3, divin[count.extract(3)]);
+        divres = divres.insert(4, divin[count.extract(4)]);
+        divres = divres.insert(5, divin[count.extract(5)]);
+        divres = divres.insert(6, divin[count.extract(6)]);
+        return divres.insert(7, divin[count.extract(7)]);
     }();
 
-    const Vec4i result = truncatei(to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f);
-    const Vec8us dest = compress_saturated_s2u(result, result);
-    dest.storel(dstp);
+    const Vec8i result = truncatei(to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f);
+    const Vec16us dest = compress_saturated_s2u(result, result);
+    dest.store(dstp);
 }
 
-AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
+AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_AVX2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
 {
-    const Vec4i zeroes = zero_si128();
-    Vec4i sum = zeroes;
-    Vec4i count = zeroes;
+    const Vec8i zeroes = zero_si256();
+    Vec8i sum = zeroes;
+    Vec8i count = zeroes;
 
-    const Vec4i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
+    const Vec8i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
 
     // Build edge values
-    const Vec4i center_pixel = Vec4i().load_4us(srcp);
-    const Vec4i add = Vec4i().load_4us(origsp + (static_cast<int64_t>(stride) << 1)) + Vec4i().load_4us(origsp + 1);
-    const Vec4i sllq = center_pixel << 1;
+    const Vec8i center_pixel = Vec8i().load_8us(srcp);
+    const Vec8i add = Vec8i().load_8us(origsp + (static_cast<int64_t>(stride) << 1)) + Vec8i().load_8us(origsp + 1);
+    const Vec8i sllq = center_pixel << 1;
 
     // Store weight with edge bias
-    const Vec4i str = strength - (sllq - add | add - sllq);
+    const Vec8i str = strength - (sllq - add | add - sllq);
 
     srcp = srcp - diff;
 
@@ -66,12 +70,12 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
     {
         for (int x = 0; x < width; ++x)
         {
-            const Vec4i neighbour_pixel = Vec4i().load_4us(srcp + x);
+            const Vec8i neighbour_pixel = Vec8i().load_8us(srcp + x);
 
-            const Vec4i abs_diff = abs(center_pixel - neighbour_pixel);
+            const Vec8i abs_diff = abs(center_pixel - neighbour_pixel);
 
             // Absolute difference less than thres
-            const Vec4ib mask = thres > abs_diff;
+            const Vec8ib mask = thres > abs_diff;
 
             // Sum up the pixels that meet the criteria
             sum = sum + (neighbour_pixel & mask);
@@ -83,21 +87,25 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE41(const uint8_t* origsp, co
         srcp += stride;
     }
 
-    Vec4i divres = [&]() {
+    Vec8i divres = [&]() {
         divres = divres.insert(0, divin[count.extract(0)]);
         divres = divres.insert(1, divin[count.extract(1)]);
         divres = divres.insert(2, divin[count.extract(2)]);
-        return divres.insert(3, divin[count.extract(3)]);
+        divres = divres.insert(3, divin[count.extract(3)]);
+        divres = divres.insert(4, divin[count.extract(4)]);
+        divres = divres.insert(5, divin[count.extract(5)]);
+        divres = divres.insert(6, divin[count.extract(6)]);
+        return divres.insert(7, divin[count.extract(7)]);
     }();
 
     // Weight with original depending on edge value
-    const Vec4i result = truncatei(to_float(center_pixel) * to_float(65535 - str) / 65535.0f + to_float(str) * to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f / 65535.0f);
-    const Vec8us dest = compress_saturated_s2u(result, result);
-    dest.storel(dstp);
+    const Vec8i result = truncatei(to_float(center_pixel) * to_float(65535 - str) / 65535.0f + to_float(str) * to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f / 65535.0f);
+    const Vec16us dest = compress_saturated_s2u(result, result);
+    dest.store(dstp);
 }
 
 template <bool interlaced, bool hqy, bool hqc>
-void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
+void SmoothUV2::smoothN_AVX2(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env)
 {
     void (SmoothUV2:: * sum_pixels)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength);
     void (SmoothUV2:: * sum_pix_c)(const uint8_t * origsp, const uint16_t * srcp, uint16_t * dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int);
@@ -136,12 +144,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
 
             if constexpr (hqy)
             {
-                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sshiq_sum_pixels_AVX2;
                 sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
-                sum_pixels = &SmoothUV2::sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sum_pixels_AVX2;
                 sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
@@ -160,12 +168,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
 
             if constexpr (hqc)
             {
-                sum_pixels = &SmoothUV2::sshiq_sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sshiq_sum_pixels_AVX2;
                 sum_pix_c = &SmoothUV2::sshiq_sum_pixels_c;
             }
             else
             {
-                sum_pixels = &SmoothUV2::sum_pixels_SSE41;
+                sum_pixels = &SmoothUV2::sum_pixels_AVX2;
                 sum_pix_c = &SmoothUV2::sum_pixels_c;
             }
         }
@@ -180,7 +188,7 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
         const uint16_t* srcp2 = srcp + stride;
         uint16_t* dstp2 = dstp + dst_stride;
         int h2 = h;
-        const int col = (w - 16) - ((w - 16) % 4);
+        const int col = (w - 16) - ((w - 16) % 8);
 
         if (interlaced)
         {
@@ -212,7 +220,7 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
                     (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp2 + x, dstp2 + x, stride, offset + x0, xn, yn, thr, strength);
             }
 
-            for (int x = 16; x < col; x += 4)
+            for (int x = 16; x < col; x += 8)
             {
                 const int xn = (radius_w << 1) + 1;
 
@@ -251,7 +259,7 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
                 (this->*sum_pix_c)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + x0, x0 + radius_w + 1, yn, thr, strength);
             }
 
-            for (int x = 16; x < col; x += 4)
+            for (int x = 16; x < col; x += 8)
                 (this->*sum_pixels)(origsp + (static_cast<int64_t>(x) << 1), srcp + x, dstp + x, stride, offset + radius_w, (radius_w << 1) + 1, yn, thr, strength);
 
             for (int x = col; x < w; ++x)
@@ -260,12 +268,12 @@ void SmoothUV2::smoothN_SSE41(PVideoFrame& dst, PVideoFrame& src, IScriptEnviron
     }
 }
 
-template void SmoothUV2::smoothN_SSE41<true, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<true, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<true, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<true, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<true, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<true, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
 
-template void SmoothUV2::smoothN_SSE41<false, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
-template void SmoothUV2::smoothN_SSE41<false, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<false, true, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<false, true, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<false, false, true>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
+template void SmoothUV2::smoothN_AVX2<false, false, false>(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);

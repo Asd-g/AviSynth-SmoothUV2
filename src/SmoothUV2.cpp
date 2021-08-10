@@ -223,14 +223,18 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SSHiQ2: strC must be between 0 and 255 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SSHiQ2: interlaced must be between -1 and 1 (inclusive).");
-        if (opt < -1 || opt > 3)
-            env->ThrowError("SSHiQ2: opt must be between -1 and 3 (inclusive).");
+        if (opt < -1 || opt > 5)
+            env->ThrowError("SSHiQ2: opt must be between -1 and 4 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SSHiQ2: opt=1 requires SSE2.");
         if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
             env->ThrowError("SSHiQ2: opt=2 requires SSSE3.");
         if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
             env->ThrowError("SSHiQ2: opt=3 requires SSE4.1.");
+        if (opt == 4 && !(env->GetCPUFlags() & CPUF_AVX2))
+            env->ThrowError("SSHiQ2: opt=3 requires AVX2.");
+        if (opt == 5 && !(env->GetCPUFlags() & CPUF_AVX512F))
+            env->ThrowError("SSHiQ2: opt=3 requires AVX512F.");
     }
     else
     {
@@ -242,14 +246,18 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
             env->ThrowError("SmoothUV2: threshold must be between 0 and 450 (inclusive).");
         if (_interlaced < -1 || _interlaced > 1)
             env->ThrowError("SmoothUV2: interlaced must be between -1 and 1 (inclusive).");
-        if (opt < -1 || opt > 3)
-            env->ThrowError("SmoothUV2: opt must be between -1 and 3 (inclusive).");
+        if (opt < -1 || opt > 5)
+            env->ThrowError("SmoothUV2: opt must be between -1 and 4 (inclusive).");
         if (opt == 1 && !(env->GetCPUFlags() & CPUF_SSE2))
             env->ThrowError("SmoothUV2: opt=1 requires SSE2.");
         if (opt == 2 && !(env->GetCPUFlags() & CPUF_SSSE3))
             env->ThrowError("SmoothUV2: opt=2 requires SSSE3.");
         if (opt == 3 && !(env->GetCPUFlags() & CPUF_SSE4_1))
             env->ThrowError("SmoothUV2: opt=3 requires SSE4.1.");
+        if (opt == 4 && !(env->GetCPUFlags() & CPUF_AVX2))
+            env->ThrowError("SmoothUV2: opt=3 requires AVX2.");
+        if (opt == 5 && !(env->GetCPUFlags() & CPUF_AVX512F))
+            env->ThrowError("SmoothUV2: opt=3 requires AVX512F.");
     }
 
     _thresholdY = (thresholdY != -1337) ? (thresholdY * 65535 / 255) : thresholdY;
@@ -276,6 +284,8 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
     sse2 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSE2)) || opt == 1;
     ssse3 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSSE3)) || opt == 2;
     sse41 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_SSE4_1)) || opt == 3;
+    avx2 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_AVX2)) || opt == 4;
+    avx512 = (opt < 0 && !!(env->GetCPUFlags() & CPUF_AVX512F)) || opt == 5;
 
     if (_interlaced > -1)
         field_based = _interlaced;
@@ -287,7 +297,41 @@ SmoothUV2::SmoothUV2(PClip _child, int radiusY, int radiusC, int thresholdY, int
 
     if (!has_at_least_v8)
     {
-        if (sse41)
+        if (avx512)
+        {
+            if (HQY)
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, true, true> : &SmoothUV2::smoothN_AVX512<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, true, false> : &SmoothUV2::smoothN_AVX512<false, true, false>;
+            }
+            else
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, false, true> : &SmoothUV2::smoothN_AVX512<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, false, false> : &SmoothUV2::smoothN_AVX512<false, false, false>;
+            }
+        }
+        else if (avx2)
+        {
+            if (HQY)
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, true, true> : &SmoothUV2::smoothN_AVX2<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, true, false> : &SmoothUV2::smoothN_AVX2<false, true, false>;
+            }
+            else
+            {
+                if (HQC)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, false, true> : &SmoothUV2::smoothN_AVX2<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, false, false> : &SmoothUV2::smoothN_AVX2<false, false, false>;
+            }
+        }
+        else if (sse41)
         {
             if (HQY)
             {
@@ -372,7 +416,41 @@ PVideoFrame __stdcall SmoothUV2::GetFrame(int n, IScriptEnvironment* env)
             field_based = (env->propNumElements(props, "_FieldBased") > 0) ? env->propGetInt(props, "_FieldBased", 0, nullptr) : 0;
         }
 
-        if (sse41)
+        if (avx512)
+        {
+            if (hqy)
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, true, true> : &SmoothUV2::smoothN_AVX512<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, true, false> : &SmoothUV2::smoothN_AVX512<false, true, false>;
+            }
+            else
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, false, true> : &SmoothUV2::smoothN_AVX512<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX512<true, false, false> : &SmoothUV2::smoothN_AVX512<false, false, false>;
+            }
+        }
+        else if (avx2)
+        {
+            if (hqy)
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, true, true> : &SmoothUV2::smoothN_AVX2<false, true, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, true, false> : &SmoothUV2::smoothN_AVX2<false, true, false>;
+            }
+            else
+            {
+                if (hqc)
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, false, true> : &SmoothUV2::smoothN_AVX2<false, false, true>;
+                else
+                    smooth = (field_based) ? &SmoothUV2::smoothN_AVX2<true, false, false> : &SmoothUV2::smoothN_AVX2<false, false, false>;
+            }
+        }
+        else if (sse41)
         {
             if (hqy)
             {

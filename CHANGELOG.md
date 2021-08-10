@@ -1,3 +1,6 @@
+##### 4.4.0:
+    Added AVX2 and AVX512 code.
+
 ##### 4.3.1:
     Added SSSE3 code.
 

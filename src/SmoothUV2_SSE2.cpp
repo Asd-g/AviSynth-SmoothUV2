@@ -1,64 +1,13 @@
-#include <emmintrin.h>
-
 #include "SmoothUV2.h"
-
-static AVS_FORCEINLINE __m128i mul_u32_(const __m128i a, const __m128i b, const float peak)
-{
-    return _mm_cvtps_epi32(_mm_div_ps(_mm_mul_ps(_mm_cvtepi32_ps(a), _mm_cvtepi32_ps(b)), _mm_set_ps1(peak)));
-}
-
-static AVS_FORCEINLINE __m128i packus(const __m128i a, const __m128i b)
-{
-    const static __m128i val_32 = _mm_set_epi32(0x8000, 0x8000, 0x8000, 0x8000);
-
-    return _mm_add_epi16(_mm_packs_epi32(_mm_sub_epi32(a, val_32), _mm_sub_epi32(b, val_32)), _mm_set_epi16(0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000));
-}
-
-static AVS_FORCEINLINE __m128i abs(const __m128i a)
-{
-    const __m128i mask = _mm_cmplt_epi32(a, _mm_setzero_si128());
-    return _mm_add_epi32(_mm_xor_si128(a, mask), _mm_srli_epi32(mask, 31));
-}
-
-static AVS_FORCEINLINE __m128i insert(const __m128i a, int i, const int imm8)
-{
-    switch (imm8)
-    {
-        case 0: return _mm_insert_epi16(_mm_insert_epi16(a, i, 0), i << 16, 1);
-        case 1: return _mm_insert_epi16(_mm_insert_epi16(a, i, 2), i << 16, 3);
-        case 2: return _mm_insert_epi16(_mm_insert_epi16(a, i, 4), i << 16, 5);
-        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 6), i << 16, 7);
-    }
-}
-
-static AVS_FORCEINLINE __m128i insert_hi(const __m128i a, int i, const int imm8)
-{
-    switch (imm8)
-    {
-        case 0: return _mm_insert_epi16(_mm_insert_epi16(a, i, 0), i >> 16, 1);
-        default: return _mm_insert_epi16(_mm_insert_epi16(a, i, 4), i >> 16, 5);
-    }
-}
-
-static AVS_FORCEINLINE int extract(const __m128i a, const int imm)
-{
-    switch (imm)
-    {
-        case 0: return _mm_cvtsi128_si32(_mm_srli_si128((a), 0));
-        case 1: return _mm_cvtsi128_si32(_mm_srli_si128((a), 4));
-        case 2: return _mm_cvtsi128_si32(_mm_srli_si128((a), 8));
-        default: return _mm_cvtsi128_si32(_mm_srli_si128((a), 12));
-    }
-}
 
 AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int)
 {
-    const __m128i zeroes = _mm_setzero_si128();
-    __m128i sum = zeroes;
-    __m128i count = zeroes;
+    const Vec4i zeroes = zero_si128();
+    Vec4i sum = zeroes;
+    Vec4i count = zeroes;
 
-    const __m128i thres = _mm_set1_epi32(sqrt(static_cast<int64_t>(threshold) * threshold / 3));
-    const __m128i center_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp)), zeroes);
+    const Vec4i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
+    const Vec4i center_pixel = Vec4i().load_4us(srcp);
 
     srcp = srcp - diff;
 
@@ -66,77 +15,50 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSE2(const uint8_t* origsp, const uin
     {
         for (int x = 0; x < width; ++x)
         {
-            const __m128i neighbour_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)), zeroes);
+            const Vec4i neighbour_pixel = Vec4i().load_4us(srcp + x);
 
-            const __m128i abs_diff = abs(_mm_sub_epi32(center_pixel, neighbour_pixel));
+            const Vec4i abs_diff = abs(center_pixel - neighbour_pixel);
 
             // Absolute difference less than thres
-            const __m128i mask = _mm_cmpgt_epi32(thres, abs_diff);
+            const Vec4ib mask = thres > abs_diff;
 
             // Sum up the pixels that meet the criteria
-            sum = _mm_add_epi32(sum,
-                _mm_and_si128(neighbour_pixel, mask));
+            sum = sum + (neighbour_pixel & mask);
 
             // Keep track of how many pixels are in the sum
-            count = _mm_sub_epi32(count, mask);
+            count = count - mask;
         }
 
         srcp += stride;
     }
 
-    sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
-
-    __m128i divres_hi = [&]() {
-        divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
-        return insert(divres_hi, divin[extract(count, 1)], 2);
+    Vec4i divres = [&]() {
+        divres = divres.insert(0, divin[count.extract(0)]);
+        divres = divres.insert(1, divin[count.extract(1)]);
+        divres = divres.insert(2, divin[count.extract(2)]);
+        return divres.insert(3, divin[count.extract(3)]);
     }();
 
-    __m128i divres_lo = [&]() {
-        divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
-        return insert(divres_lo, divin[extract(count, 3)], 2);
-    }();
-
-    __m128i sum_hi = [&]() {
-        sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
-        return insert_hi(sum_hi, extract(sum, 1), 2);
-    }();
-
-    __m128i sum_lo = [&]() {
-        sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
-        return insert_hi(sum_lo, extract(sum, 3), 2);
-    }();
-
-    const __m128i mul_hi = _mm_mul_epu32(sum_hi, divres_hi);
-    const __m128i mul_lo = _mm_mul_epu32(sum_lo, divres_lo);
-
-    __m128i result = [&]() {
-        result = insert(result, extract(_mm_unpacklo_epi16(mul_hi, zeroes), 1), 0);
-        result = insert(result, extract(_mm_unpackhi_epi16(mul_hi, zeroes), 1), 1);
-        result = insert(result, extract(_mm_unpacklo_epi16(mul_lo, zeroes), 1), 2);
-        return insert(result, extract(_mm_unpackhi_epi16(mul_lo, zeroes), 1), 3);
-    }();
-
-    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), packus(result, result));
+    const Vec4i result = truncatei(to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f);
+    const Vec8us dest = compress_saturated_s2u(result, result);
+    dest.storel(dstp);
 }
 
 AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE2(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
 {
-    const __m128i zeroes = _mm_setzero_si128();
-    __m128i sum = zeroes;
-    __m128i count = zeroes;
+    const Vec4i zeroes = zero_si128();
+    Vec4i sum = zeroes;
+    Vec4i count = zeroes;
 
-    const __m128i thres = _mm_set1_epi32(sqrt(static_cast<int64_t>(threshold) * threshold / 3));
+    const Vec4i thres = sqrt(static_cast<int64_t>(threshold) * threshold / 3);
 
     // Build edge values
-    const __m128i center_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp)), zeroes);
-    const __m128i add = _mm_add_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + (static_cast<int64_t>(stride) << 1))), zeroes), _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(origsp + 1)), zeroes));
-    const __m128i sllq = _mm_slli_epi32(center_pixel, 1);
+    const Vec4i center_pixel = Vec4i().load_4us(srcp);
+    const Vec4i add = Vec4i().load_4us(origsp + (static_cast<int64_t>(stride) << 1)) + Vec4i().load_4us(origsp + 1);
+    const Vec4i sllq = center_pixel << 1;
 
     // Store weight with edge bias
-    const __m128i sub = _mm_sub_epi32(_mm_set1_epi32(strength), _mm_or_si128(_mm_sub_epi32(sllq, add), _mm_sub_epi32(add, sllq)));
-    const __m128i peak = _mm_set1_epi32(65535);
-    const __m128i greater = _mm_cmpgt_epi32(sub, peak);
-    const __m128i str = _mm_or_si128(_mm_and_si128(greater, peak), _mm_andnot_si128(greater, sub));
+    const Vec4i str = strength - (sllq - add | add - sllq);
 
     srcp = srcp - diff;
 
@@ -144,52 +66,34 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSE2(const uint8_t* origsp, con
     {
         for (int x = 0; x < width; ++x)
         {
-            const __m128i neighbour_pixel = _mm_unpacklo_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(srcp + x)), zeroes);
-            const __m128i mask = _mm_cmpgt_epi32(thres, abs(_mm_sub_epi32(center_pixel, neighbour_pixel)));
-            sum = _mm_add_epi32(sum, _mm_and_si128(neighbour_pixel, mask));
-            count = _mm_sub_epi32(count, mask);
+            const Vec4i neighbour_pixel = Vec4i().load_4us(srcp + x);
+
+            const Vec4i abs_diff = abs(center_pixel - neighbour_pixel);
+
+            // Absolute difference less than thres
+            const Vec4ib mask = thres > abs_diff;
+
+            // Sum up the pixels that meet the criteria
+            sum = sum + (neighbour_pixel & mask);
+
+            // Keep track of how many pixels are in the sum
+            count = count - mask;
         }
 
         srcp += stride;
     }
 
-    sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
-
-    __m128i divres_hi = [&]() {
-        divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
-        return insert(divres_hi, divin[extract(count, 1)], 2);
-    }();
-
-    __m128i divres_lo = [&]() {
-        divres_lo = insert(divres_lo, divin[extract(count, 2)], 0);
-        return insert(divres_lo, divin[extract(count, 3)], 2);
-    }();
-
-    __m128i sum_hi = [&]() {
-        sum_hi = insert_hi(sum_hi, extract(sum, 0), 0);
-        return insert_hi(sum_hi, extract(sum, 1), 2);
-    }();
-
-    __m128i sum_lo = [&]() {
-        sum_lo = insert_hi(sum_lo, extract(sum, 2), 0);
-        return insert_hi(sum_lo, extract(sum, 3), 2);
-    }();
-
-    __m128i mul_hi = _mm_mul_epu32(sum_hi, divres_hi);
-    __m128i mul_lo = _mm_mul_epu32(sum_lo, divres_lo);
-
-    __m128i result = [&]() {
-        result = insert(result, extract(_mm_unpacklo_epi16(mul_hi, zeroes), 1), 0);
-        result = insert(result, extract(_mm_unpackhi_epi16(mul_hi, zeroes), 1), 1);
-        result = insert(result, extract(_mm_unpacklo_epi16(mul_lo, zeroes), 1), 2);
-        return insert(result, extract(_mm_unpackhi_epi16(mul_lo, zeroes), 1), 3);
+    Vec4i divres = [&]() {
+        divres = divres.insert(0, divin[count.extract(0)]);
+        divres = divres.insert(1, divin[count.extract(1)]);
+        divres = divres.insert(2, divin[count.extract(2)]);
+        return divres.insert(3, divin[count.extract(3)]);
     }();
 
     // Weight with original depending on edge value
-    result = _mm_add_epi32(mul_u32_(center_pixel, _mm_sub_epi32(_mm_set1_epi32(65535), str), 65535.0f),
-        mul_u32_(str, result, 65535.0f));
-
-    _mm_storel_epi64(reinterpret_cast<__m128i*>(dstp), packus(result, result));
+    const Vec4i result = truncatei(to_float(center_pixel) * to_float(65535 - str) / 65535.0f + to_float(str) * to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f / 65535.0f);
+    const Vec8us dest = compress_saturated_s2u(result, result);
+    dest.storel(dstp);
 }
 
 template <bool interlaced, bool hqy, bool hqc>

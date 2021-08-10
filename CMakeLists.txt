@@ -18,6 +18,8 @@ add_library(smoothuv2 SHARED
     src/SmoothUV2_SSE2.cpp
     src/SmoothUV2_SSSE3.cpp
     src/SmoothUV2_SSE41.cpp
+    src/SmoothUV2_AVX2.cpp
+    src/SmoothUV2_AVX512.cpp
 )
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -29,6 +31,8 @@ message(STATUS "Build type - ${CMAKE_BUILD_TYPE}")
 set_source_files_properties(src/SmoothUV2_SSE2.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-msse2")
 set_source_files_properties(src/SmoothUV2_SSSE3.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-mssse3")
 set_source_files_properties(src/SmoothUV2_SSE41.cpp PROPERTIES COMPILE_OPTIONS "-mfpmath=sse;-msse4.1")
+set_source_files_properties(src/SmoothUV2_AVX2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+set_source_files_properties(src/SmoothUV2_AVX512.cpp PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vl;-mfma")
 
 target_include_directories(smoothuv2 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
