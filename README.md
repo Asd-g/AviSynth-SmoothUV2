@@ -1,20 +1,22 @@
-# Description
+## Description
 
 SmoothUV2 is a spatial derainbow filter. The luma is returned unchanged. This is [a port of the VapourSynth plugin SmoothUV](https://github.com/dubhater/vapoursynth-smoothuv).
 
 SSHiQ2 is general purpose spatial denoiser. This an updated version of SSHiQ from SmoothUV v1.4.0.
 
-# Requirement
+### Requirements:
 
-AviSynth+.
+- AviSynth+ 3.4 or later
 
-# Usage
+- Microsoft VisualC++ Redistributable Package 2022 (can be downloaded from [here](https://github.com/abbodi1406/vcredist/releases)) (Windows only)
+
+### Usage:
 
 ```
 SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int "dither")
 ```
 
-## Parameters:
+### Parameters:
 
 - clip\
     A clip to process. It must be in YUV 8..16-bit planar format and must have at least three planes.
@@ -61,7 +63,7 @@ SmoothUV2 (clip, int "radius", int "threshold", int "interlaced", int "opt", int
 SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "strY", int "strC", bool "HQY", bool "HQC", int "interlaced", int "opt", int "dither")
 ```
 
-## Parameters:
+### Parameters:
 
 - clip\
     A clip to process. It must be in YUV 8..16-bit planar format and must have at least three planes.
@@ -118,26 +120,24 @@ SSHiQ2 (clip, int "rY", int "rC", int "tY", int "tC", int "strY", int "strC", bo
     1: Error diffusion (Floyd-Steinberg).\
     Default: -1.
 
-# Building
+### Building:
 
-## Windows
+- Windows\
+    Use solution files.
 
-Use solution files.
-
-## Linux
-
-### Requirements
-
-- Git
-- C++17 compiler
-- CMake >= 3.16
-
-```
-git clone https://github.com/Asd-g/AviSynth-SmoothUV2 && \
-cd AviSynth-SmoothUV2 && \
-mkdir build && \
-cd build && \
-cmake .. && \
-make -j$(nproc) && \
-sudo make install
-```
+- Linux
+    ```
+    Requirements:
+        - Git
+        - C++17 compiler
+        - CMake >= 3.16
+    ```
+    ```
+    git clone https://github.com/Asd-g/AviSynth-SmoothUV2 && \
+    cd AviSynth-SmoothUV2 && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    sudo make install
+    ```
