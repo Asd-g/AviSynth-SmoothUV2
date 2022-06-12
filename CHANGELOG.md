@@ -1,5 +1,5 @@
 ##### 4.4.1:
-    Fixed a left shift of pixel count.
+    Fixed a left shift of pixel count. (dubhater)
 
 ##### 4.4.0:
     Added AVX2 and AVX512 code.
