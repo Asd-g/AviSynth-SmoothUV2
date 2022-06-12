@@ -1,3 +1,6 @@
+##### 4.4.1:
+    Fixed a left shift of pixel count.
+
 ##### 4.4.0:
     Added AVX2 and AVX512 code.
 
@@ -56,6 +59,6 @@
 
 ##### 2.1.0:
     Added support for v8 interface.
-    
+
 ##### 2.0.0:
     Port of the VapourSynth plugin SmoothUV v2.
