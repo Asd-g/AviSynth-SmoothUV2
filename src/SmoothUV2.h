@@ -11,13 +11,13 @@ class SmoothUV2 : public GenericVideoFilter
 {
     int radiusy, radiuscw, radiusch;
     int _thresholdY, _thresholdC;
-    int strengthY, strengthC;    
+    int strengthY, strengthC;
     bool hqy, hqc;
     int _interlaced;
     bool has_at_least_v8;
     std::unique_ptr<uint16_t[]> divin;
     int64_t field_based;
-    bool sse2, ssse3, sse41, avx2,avx512;
+    bool sse2, ssse3, sse41, avx2, avx512;
 
     template <bool interlaced, bool hqy, bool hqc>
     void smoothN_c(PVideoFrame& dst, PVideoFrame& src, IScriptEnvironment* env);
