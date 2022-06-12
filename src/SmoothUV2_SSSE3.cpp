@@ -78,7 +78,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_SSSE3(const uint8_t* origsp, const ui
         srcp += stride;
     }
 
-    sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
+    sum = _mm_add_epi32(sum, _mm_srli_epi32(count, 1));
 
     __m128i divres_hi = [&]() {
         divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);
@@ -147,7 +147,7 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_SSSE3(const uint8_t* origsp, co
         srcp += stride;
     }
 
-    sum = _mm_add_epi32(sum, _mm_srli_epi32(_mm_slli_epi32(count, 8), 1));
+    sum = _mm_add_epi32(sum, _mm_srli_epi32(count, 1));
 
     __m128i divres_hi = [&]() {
         divres_hi = insert(divres_hi, divin[extract(count, 0)], 0);

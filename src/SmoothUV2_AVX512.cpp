@@ -51,7 +51,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_AVX512(const uint8_t* origsp, const u
         return divres.insert(15, divin[count.extract(15)]);
     }();
 
-    const Vec16i result = truncatei(to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f);
+    const Vec16i result = truncatei(to_float((sum + (count >> 1))) * to_float(divres) / 65535.0f);
     const Vec32us dest = compress_saturated_s2u(result, result);
     dest.store(dstp);
 }
@@ -115,7 +115,7 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_AVX512(const uint8_t* origsp, c
     }();
 
     // Weight with original depending on edge value
-    const Vec16i result = truncatei(to_float(center_pixel) * to_float(65535 - str) / 65535.0f + to_float(str) * to_float((sum + ((count << 8) >> 1))) * to_float(divres) / 65535.0f / 65535.0f);
+    const Vec16i result = truncatei(to_float(center_pixel) * to_float(65535 - str) / 65535.0f + to_float(str) * to_float((sum + (count >> 1))) * to_float(divres) / 65535.0f / 65535.0f);
     const Vec32us dest = compress_saturated_s2u(result, result);
     dest.store(dstp);
 }

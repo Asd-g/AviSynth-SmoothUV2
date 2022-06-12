@@ -31,7 +31,7 @@ AVS_FORCEINLINE void SmoothUV2::sum_pixels_c(const uint8_t* origsp, const uint16
         srcp += stride;
     }
 
-    *(dstp) = (sum + ((count << 8) >> 1)) * divin[count] / 65535;
+    *(dstp) = (sum + (count >> 1)) * divin[count] / 65535;
 }
 
 AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_c(const uint8_t* origsp, const uint16_t* srcp, uint16_t* dstp, const int stride, const int diff, const int width, const int height, const int threshold, const int strength)
@@ -72,7 +72,7 @@ AVS_FORCEINLINE void SmoothUV2::sshiq_sum_pixels_c(const uint8_t* origsp, const 
         srcp += stride;
     }
 
-    *(dstp) = center_pixel * (65535 - str) / 65535 + str * (sum + ((count << 8) >> 1)) * divin[count] / 65535 / 65535;
+    *(dstp) = center_pixel * (65535 - str) / 65535 + str * (sum + (count >> 1)) * divin[count] / 65535 / 65535;
 }
 
 template <bool interlaced, bool hqy, bool hqc>
